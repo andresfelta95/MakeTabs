@@ -1,0 +1,78 @@
+import type { TabJob } from "../types";
+
+interface PipelineStatusProps {
+  job: TabJob;
+}
+
+const steps = [
+  { key: "download", label: "Downloading audio" },
+  { key: "separate", label: "Separating guitar track" },
+  { key: "detect", label: "Detecting guitar" },
+  { key: "transcribe", label: "Transcribing notes" },
+  { key: "build", label: "Building tabs" },
+];
+
+function getStepStatus(jobStatus: TabJob["status"], index: number) {
+  if (jobStatus === "done") return "done";
+  if (jobStatus === "failed") return index === 0 ? "failed" : "pending";
+  if (jobStatus === "processing") {
+    // Rough heuristic — in Phase 2 the backend can report a more granular step
+    if (index === 0) return "active";
+    return "pending";
+  }
+  return "pending";
+}
+
+export default function PipelineStatus({ job }: PipelineStatusProps) {
+  if (job.status === "done" && job.has_guitar === false) {
+    return (
+      <div className="bg-spotify-card rounded-xl p-6 text-center">
+        <p className="text-2xl mb-2">🎸</p>
+        <p className="text-gray-300 font-medium">No guitar detected in this track</p>
+        <p className="text-gray-500 text-sm mt-1">Try a different song</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-spotify-card rounded-xl p-6 space-y-4">
+      {job.track && (
+        <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+          {job.track.image_url && (
+            <img src={job.track.image_url} alt="" className="w-12 h-12 rounded" />
+          )}
+          <div>
+            <p className="font-medium text-white">{job.track.title}</p>
+            <p className="text-sm text-gray-400">{job.track.artist}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {steps.map((step, i) => {
+          const status = getStepStatus(job.status, i);
+          return (
+            <div key={step.key} className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs
+                ${status === "done" ? "bg-spotify-green text-black" : ""}
+                ${status === "active" ? "border-2 border-spotify-green animate-pulse" : ""}
+                ${status === "pending" ? "border border-gray-600" : ""}
+                ${status === "failed" ? "bg-red-500 text-white" : ""}
+              `}>
+                {status === "done" && "✓"}
+                {status === "failed" && "✕"}
+              </div>
+              <span className={`text-sm ${status === "active" ? "text-white" : "text-gray-400"}`}>
+                {step.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {job.status === "failed" && job.error && (
+        <p className="text-sm text-red-400 mt-2">{job.error}</p>
+      )}
+    </div>
+  );
+}
