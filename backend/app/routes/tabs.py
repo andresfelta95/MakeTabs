@@ -8,7 +8,7 @@ GET  /tabs/track/{spotify_id} — get cached tab by Spotify track ID
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas.tab import GenerateTabRequest, TabJobOut
 from app.schemas.track import TrackOut
+from app.services.audio_pipeline import process_tab_job
 from app.services.spotify_client import SpotifyClient
 
 router = APIRouter(prefix="/tabs", tags=["tabs"])
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/tabs", tags=["tabs"])
 @router.post("/generate", response_model=TabJobOut)
 async def generate_tabs(
     body: GenerateTabRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -67,9 +69,14 @@ async def generate_tabs(
     await db.commit()
     await db.refresh(tab_gen)
 
-    # TODO (Phase 2): enqueue background processing job
-    # from app.tasks import process_tab_job
-    # process_tab_job.delay(tab_gen.id)
+    if tab_gen.status == "pending":
+        background_tasks.add_task(
+            process_tab_job,
+            tab_gen.id,
+            track.title,
+            track.artist,
+            track.duration_ms or 240000,
+        )
 
     return _tab_job_out(tab_gen, track)
 
