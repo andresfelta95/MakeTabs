@@ -28,7 +28,7 @@ class TabGeneration(Base):
     tab_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Version string lets us invalidate cache when the algorithm improves
-    algorithm_version: Mapped[str] = mapped_column(String, nullable=False, default="2.3.0")
+    algorithm_version: Mapped[str] = mapped_column(String, nullable=False, default="2.4.0")
 
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
 

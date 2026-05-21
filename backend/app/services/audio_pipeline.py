@@ -39,6 +39,10 @@ _TUNING_NAMES = ["E", "A", "D", "G", "B", "e"]
 _MAX_FRET = 22
 _MIN_VELOCITY = 60  # filter out very quiet (likely noise) notes
 
+# Tab grid resolution
+_BEATS_PER_MEASURE = 8    # eighth-note slots (quarter note = 2 slots)
+_MEASURES_PER_SECTION = 4 # keep display width ≈ 96 chars (8 × 4 × 3)
+
 # Serialize heavy pipeline jobs — prevents OOM from concurrent Demucs runs
 _pipeline_lock = threading.Lock()
 
@@ -164,11 +168,9 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
 
 def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> list[dict]:
     """Convert note events into a list of tab sections."""
-    BEATS_PER_MEASURE = 4
-    MEASURES_PER_SECTION = 8
-
-    beat_dur = 60.0 / max(bpm, 20)
-    measure_dur = BEATS_PER_MEASURE * beat_dur
+    quarter_dur = 60.0 / max(bpm, 20)
+    measure_dur = 4 * quarter_dur              # always 4/4
+    beat_dur = measure_dur / _BEATS_PER_MEASURE  # eighth-note slot width
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
@@ -188,7 +190,7 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
             continue
 
         m_idx = min(int(start_s / measure_dur), total_measures - 1)
-        beat = min(int((start_s % measure_dur) / beat_dur), BEATS_PER_MEASURE - 1)
+        beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
         string_num, fret = pos
         key = (m_idx, string_num)
         if key not in best:
@@ -204,8 +206,8 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
             notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat})
 
     sections = []
-    for i in range(0, total_measures, MEASURES_PER_SECTION):
-        chunk = notes_by_measure[i: i + MEASURES_PER_SECTION]
+    for i in range(0, total_measures, _MEASURES_PER_SECTION):
+        chunk = notes_by_measure[i: i + _MEASURES_PER_SECTION]
         if any(chunk):
             sections.append({
                 "name": f"Section {len(sections) + 1}",
@@ -234,9 +236,9 @@ def _split_notes(note_events) -> tuple:
 
 def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
     """Count how many beat slots have 1 note (melodic) vs 2+ notes (chordal)."""
-    BEATS_PER_MEASURE = 4
-    beat_dur = 60.0 / max(bpm, 20)
-    measure_dur = BEATS_PER_MEASURE * beat_dur
+    quarter_dur = 60.0 / max(bpm, 20)
+    measure_dur = 4 * quarter_dur
+    beat_dur = measure_dur / _BEATS_PER_MEASURE
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
@@ -248,7 +250,7 @@ def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
         if velocity < _MIN_VELOCITY / 127 or _midi_to_guitar(pitch) is None:
             continue
         m_idx = min(int(start_s / measure_dur), total_measures - 1)
-        beat = min(int((start_s % measure_dur) / beat_dur), BEATS_PER_MEASURE - 1)
+        beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
         slot_counts[(m_idx, beat)] = slot_counts.get((m_idx, beat), 0) + 1
 
     if not slot_counts:
