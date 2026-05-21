@@ -18,9 +18,9 @@ class User(Base):
     # Stored encrypted — never expose raw values in responses
     access_token_enc: Mapped[str] = mapped_column(String, nullable=False)
     refresh_token_enc: Mapped[str] = mapped_column(String, nullable=False)
-    token_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

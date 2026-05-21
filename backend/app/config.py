@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     environment: str = "development"
 
+    # Lyrics
+    genius_access_token: str | None = None
+
     @property
     def is_dev(self) -> bool:
         return self.environment == "development"

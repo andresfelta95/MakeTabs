@@ -21,16 +21,19 @@ class TabGeneration(Base):
     # pending | processing | done | failed
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
 
+    # downloading | separating | detecting | transcribing | building
+    current_step: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Structured tab output — see docs/architecture.md for JSON format
     tab_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Version string lets us invalidate cache when the algorithm improves
-    algorithm_version: Mapped[str] = mapped_column(String, nullable=False, default="1.0.0")
+    algorithm_version: Mapped[str] = mapped_column(String, nullable=False, default="2.3.0")
 
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     track = relationship("Track", lazy="joined")
     requests = relationship("UserTabRequest", back_populates="tab_generation")
@@ -47,6 +50,6 @@ class UserTabRequest(Base):
     tab_generation_id: Mapped[str] = mapped_column(
         String, ForeignKey("tab_generations.id"), nullable=False
     )
-    requested_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     tab_generation = relationship("TabGeneration", back_populates="requests")

@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _OPEN_MIDI = {1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64}  # E2 A2 D3 G3 B3 E4
 _TUNING_NAMES = ["E", "A", "D", "G", "B", "e"]
 _MAX_FRET = 22
-_MIN_VELOCITY = 50  # filter out very quiet (likely noise) notes
+_MIN_VELOCITY = 60  # filter out very quiet (likely noise) notes
 
 # Serialize heavy pipeline jobs — prevents OOM from concurrent Demucs runs
 _pipeline_lock = threading.Lock()
@@ -73,16 +73,16 @@ def _download_audio(work_dir: str, title: str, artist: str) -> str:
     output_template = str(Path(work_dir) / "audio.%(ext)s")
 
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "outtmpl": output_template,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "wav",
-            "preferredquality": "192",
         }],
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "extractor_args": {"youtube": {"skip": ["dash", "hls"]}},
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -109,7 +109,7 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
         audio_path,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     if result.returncode != 0:
         raise RuntimeError(f"Demucs failed:\n{result.stderr[-1000:]}")
 
@@ -143,24 +143,27 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.5,
-        frame_threshold=0.3,
-        minimum_note_length=58,
-        minimum_frequency=80.0,
-        maximum_frequency=2000.0,
+        onset_threshold=0.65,   # higher = fewer false-positive notes
+        frame_threshold=0.4,
+        minimum_note_length=100,  # ms; eliminates very short spurious notes
+        minimum_frequency=82.0,   # E2 — lowest open string
+        maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
     )
 
     y, sr = librosa.load(audio_path, sr=None, mono=True)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     bpm = float(tempo) if float(tempo) > 20 else 120.0
+    # librosa often detects double-tempo; halve if unrealistically fast for guitar
+    if bpm > 140:
+        bpm /= 2.0
 
     return note_events, bpm
 
 
-# ── Step 5: build tab JSON ────────────────────────────────────────────────────
+# ── Step 5: build tab sections ────────────────────────────────────────────────
 
-def _build_tab(note_events: np.ndarray, bpm: float, duration_ms: int) -> dict:
-    """Convert basic-pitch note events into the tab JSON consumed by the frontend."""
+def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> list[dict]:
+    """Convert note events into a list of tab sections."""
     BEATS_PER_MEASURE = 4
     MEASURES_PER_SECTION = 8
 
@@ -169,25 +172,37 @@ def _build_tab(note_events: np.ndarray, bpm: float, duration_ms: int) -> dict:
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
-    notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
+    # (measure_idx, string) → {beat → (fret, velocity)} — keeps loudest per slot
+    best: dict[tuple[int, int], dict[int, tuple[int, float]]] = {}
 
     for event in note_events:
         start_s = float(event[0])
         pitch = int(event[2])
         velocity = float(event[3])
 
-        if velocity < _MIN_VELOCITY / 127:  # basic-pitch velocity is 0.0–1.0
+        if velocity < _MIN_VELOCITY / 127:
             continue
 
         pos = _midi_to_guitar(pitch)
         if pos is None:
             continue
 
-        idx = min(int(start_s / measure_dur), total_measures - 1)
+        m_idx = min(int(start_s / measure_dur), total_measures - 1)
+        beat = min(int((start_s % measure_dur) / beat_dur), BEATS_PER_MEASURE - 1)
         string_num, fret = pos
-        notes_by_measure[idx].append({"string": string_num, "fret": fret})
+        key = (m_idx, string_num)
+        if key not in best:
+            best[key] = {}
+        existing = best[key].get(beat)
+        if existing is None or velocity > existing[1]:
+            best[key][beat] = (fret, velocity)
 
-    # Group into sections of MEASURES_PER_SECTION, skipping fully empty sections
+    # Flatten into notes_by_measure
+    notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
+    for (m_idx, string_num), beats in best.items():
+        for beat, (fret, _) in beats.items():
+            notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat})
+
     sections = []
     for i in range(0, total_measures, MEASURES_PER_SECTION):
         chunk = notes_by_measure[i: i + MEASURES_PER_SECTION]
@@ -200,36 +215,147 @@ def _build_tab(note_events: np.ndarray, bpm: float, duration_ms: int) -> dict:
     if not sections:
         sections = [{"name": "Section 1", "measures": [{"notes": []}]}]
 
-    return {
-        "tuning": _TUNING_NAMES,
-        "bpm": round(bpm, 1),
-        "sections": sections,
-    }
+    return sections
+
+
+def _split_notes(note_events) -> tuple:
+    """Split note events into lead (high register) and rhythm (low register)."""
+    if not note_events:
+        return [], []
+
+    # note_events rows: [start_s, end_s, pitch, amplitude, pitch_bends]
+    # pitch_bends is a variable-length array → can't use np.array(), use list ops
+    pitches = [int(e[2]) for e in note_events]
+    median_pitch = sorted(pitches)[len(pitches) // 2]
+    lead = [e for e, p in zip(note_events, pitches) if p >= median_pitch]
+    rhythm = [e for e, p in zip(note_events, pitches) if p < median_pitch]
+    return lead, rhythm
+
+
+def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
+    """Count how many beat slots have 1 note (melodic) vs 2+ notes (chordal)."""
+    BEATS_PER_MEASURE = 4
+    beat_dur = 60.0 / max(bpm, 20)
+    measure_dur = BEATS_PER_MEASURE * beat_dur
+    total_s = duration_ms / 1000
+    total_measures = max(1, int(total_s / measure_dur) + 1)
+
+    slot_counts: dict[tuple[int, int], int] = {}
+    for event in note_events:
+        start_s = float(event[0])
+        pitch = int(event[2])
+        velocity = float(event[3])
+        if velocity < _MIN_VELOCITY / 127 or _midi_to_guitar(pitch) is None:
+            continue
+        m_idx = min(int(start_s / measure_dur), total_measures - 1)
+        beat = min(int((start_s % measure_dur) / beat_dur), BEATS_PER_MEASURE - 1)
+        slot_counts[(m_idx, beat)] = slot_counts.get((m_idx, beat), 0) + 1
+
+    if not slot_counts:
+        return {"chord_ratio": 0.0, "solo_ratio": 0.0, "occupied": 0}
+
+    chord = sum(1 for c in slot_counts.values() if c >= 2)
+    solo = sum(1 for c in slot_counts.values() if c == 1)
+    total = chord + solo
+    return {"chord_ratio": chord / total, "solo_ratio": solo / total, "occupied": total}
+
+
+def _needs_two_guitars(
+    lead_events: list,
+    rhythm_events: list,
+    bpm: float,
+    duration_ms: int,
+) -> bool:
+    """True only when lead is melodic (single notes) and rhythm is chordal (multi-note beats)."""
+    if len(lead_events) < 20 or len(rhythm_events) < 20:
+        return False
+
+    lead_role = _beat_role(lead_events, bpm, duration_ms)
+    rhythm_role = _beat_role(rhythm_events, bpm, duration_ms)
+
+    lead_is_melodic = lead_role["solo_ratio"] > 0.60    # mostly single notes
+    rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.30  # enough simultaneous notes
+
+    logger.info(
+        "Guitar roles — lead solo=%.2f chord=%.2f | rhythm solo=%.2f chord=%.2f → two=%s",
+        lead_role["solo_ratio"], lead_role["chord_ratio"],
+        rhythm_role["solo_ratio"], rhythm_role["chord_ratio"],
+        lead_is_melodic and rhythm_is_chordal,
+    )
+    return lead_is_melodic and rhythm_is_chordal
+
+
+def _assign_lyrics(sections: list[dict], lyrics_sections: list[dict]) -> list[dict]:
+    """Add lyrics_section index to each tab section proportionally."""
+    if not lyrics_sections:
+        return sections
+    n_lyrics = len(lyrics_sections)
+    n_tab = len(sections)
+    for i, section in enumerate(sections):
+        section["lyrics_section"] = min(int(i * n_lyrics / n_tab), n_lyrics - 1)
+    return sections
 
 
 # ── Synchronous pipeline (runs in thread) ────────────────────────────────────
 
-def _run_pipeline_sync(title: str, artist: str, duration_ms: int) -> dict:
+def _run_pipeline_sync(
+    title: str,
+    artist: str,
+    duration_ms: int,
+    on_step,  # callable(step: str) -> None
+) -> dict:
     """Full blocking pipeline. Returns {"has_guitar": bool, "tab_data": dict|None}."""
     with _pipeline_lock:
         work_dir = tempfile.mkdtemp(prefix="maketabs_")
         try:
             logger.info("Pipeline start: %s — %s", artist, title)
 
+            on_step("downloading")
             audio = _download_audio(work_dir, title, artist)
             logger.info("Audio downloaded: %s", audio)
 
+            on_step("separating")
             guitar = _separate_guitar(work_dir, audio)
             logger.info("Guitar separated: %s", guitar)
 
+            on_step("detecting")
             if not _has_guitar_energy(guitar):
                 logger.info("No guitar energy detected — skipping transcription")
                 return {"has_guitar": False, "tab_data": None}
 
+            on_step("transcribing")
             note_events, bpm = _transcribe(guitar)
             logger.info("Transcribed. BPM=%.1f, notes=%d", bpm, len(note_events))
 
-            tab_data = _build_tab(note_events, bpm, duration_ms)
+            on_step("building")
+            lead_events, rhythm_events = _split_notes(note_events)
+
+            lyrics_sections: list[dict] = []
+            if settings.genius_access_token:
+                from app.services.lyrics_service import fetch_lyrics_sections
+                lyrics_sections = fetch_lyrics_sections(title, artist, settings.genius_access_token)
+                logger.info("Lyrics: %d sections fetched", len(lyrics_sections))
+
+            if _needs_two_guitars(lead_events, rhythm_events, bpm, duration_ms):
+                logger.info("Two-guitar split: lead=%d notes, rhythm=%d notes", len(lead_events), len(rhythm_events))
+                lead_sections = _build_sections(lead_events, bpm, duration_ms)
+                rhythm_sections = _build_sections(rhythm_events, bpm, duration_ms)
+                guitars = [
+                    {"name": "Lead Guitar", "sections": _assign_lyrics(lead_sections, lyrics_sections)},
+                    {"name": "Rhythm Guitar", "sections": _assign_lyrics(rhythm_sections, lyrics_sections)},
+                ]
+            else:
+                logger.info("Single guitar: lead=%d, rhythm=%d notes — merging", len(lead_events), len(rhythm_events))
+                all_sections = _build_sections(note_events, bpm, duration_ms)
+                guitars = [
+                    {"name": "Guitar", "sections": _assign_lyrics(all_sections, lyrics_sections)},
+                ]
+            tab_data = {
+                "tuning": _TUNING_NAMES,
+                "bpm": round(bpm, 1),
+                "lyrics_sections": lyrics_sections,
+                "guitars": guitars,
+            }
             return {"has_guitar": True, "tab_data": tab_data}
 
         except Exception:
@@ -266,8 +392,24 @@ async def process_tab_job(
         job.status = "processing"
         await session.commit()
 
+    loop = asyncio.get_running_loop()
+
+    async def _update_step(step: str) -> None:
+        async with Session() as s:
+            j = await _get_job(s)
+            if j:
+                j.current_step = step
+                await s.commit()
+
+    def on_step(step: str) -> None:
+        future = asyncio.run_coroutine_threadsafe(_update_step(step), loop)
+        try:
+            future.result(timeout=10)
+        except Exception:
+            pass  # non-critical; don't abort the pipeline over a step update
+
     try:
-        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms)
+        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms, on_step)
 
         async with Session() as session:
             job = await _get_job(session)

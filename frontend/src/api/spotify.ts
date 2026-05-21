@@ -1,5 +1,5 @@
 import client from "./client";
-import type { PaginatedPlaylists, PaginatedTracks, TabJob } from "../types";
+import type { PaginatedPlaylists, PaginatedTracks, TabJob, TabStatusMap } from "../types";
 
 export const getPlaylists = async (limit = 20, offset = 0): Promise<PaginatedPlaylists> => {
   const { data } = await client.get<PaginatedPlaylists>("/spotify/playlists", {
@@ -40,5 +40,12 @@ export const generateTabs = async (spotifyTrackId: string): Promise<TabJob> => {
 
 export const getTabJob = async (jobId: string): Promise<TabJob> => {
   const { data } = await client.get<TabJob>(`/tabs/${jobId}`);
+  return data;
+};
+
+export const getTabStatuses = async (spotifyIds: string[]): Promise<TabStatusMap> => {
+  const { data } = await client.get<TabStatusMap>("/tabs/statuses", {
+    params: { ids: spotifyIds.join(",") },
+  });
   return data;
 };

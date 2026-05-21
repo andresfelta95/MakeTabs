@@ -5,6 +5,7 @@ Wraps all Spotify API calls, handles token refresh automatically,
 and maps responses to internal schema shapes.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -41,17 +42,20 @@ class SpotifyClient:
     async def _refresh_token(self) -> None:
         refresh_token = decrypt(self.user.refresh_token_enc)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                SPOTIFY_TOKEN_URL,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
-                },
-                auth=(settings.spotify_client_id, settings.spotify_client_secret),
-            )
-            response.raise_for_status()
-            data = response.json()
+        def _sync_refresh() -> dict:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    SPOTIFY_TOKEN_URL,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": refresh_token,
+                    },
+                    auth=(settings.spotify_client_id, settings.spotify_client_secret),
+                )
+                response.raise_for_status()
+                return response.json()
+
+        data = await asyncio.to_thread(_sync_refresh)
 
         self.user.access_token_enc = encrypt(data["access_token"])
         self.user.token_expires_at = datetime.now(timezone.utc) + timedelta(
@@ -66,14 +70,23 @@ class SpotifyClient:
 
     async def _get(self, path: str, params: dict | None = None) -> dict:
         token = await self._get_access_token()
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{SPOTIFY_API_BASE}{path}",
-                headers={"Authorization": f"Bearer {token}"},
-                params=params or {},
-            )
-            response.raise_for_status()
-            return response.json()
+
+        def _sync_get() -> dict:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(
+                    f"{SPOTIFY_API_BASE}{path}",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params=params or {},
+                )
+                if not response.is_success:
+                    raise httpx.HTTPStatusError(
+                        f"{response.status_code} from {path}: {response.text}",
+                        request=response.request,
+                        response=response,
+                    )
+                return response.json()
+
+        return await asyncio.to_thread(_sync_get)
 
     async def get_profile(self) -> dict:
         return await self._get("/me")
@@ -90,18 +103,25 @@ class SpotifyClient:
     async def get_playlist_tracks(
         self, playlist_id: str, limit: int = 20, offset: int = 0
     ) -> dict:
-        data = await self._get(
-            f"/playlists/{playlist_id}/tracks",
-            {"limit": limit, "offset": offset, "fields": "items(track),total,limit,offset"},
-        )
+        try:
+            data = await self._get(
+                f"/playlists/{playlist_id}/tracks",
+                {"limit": limit, "offset": offset, "fields": "items(track),total,limit,offset"},
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 403:
+                return {"items": [], "total": 0, "limit": limit, "offset": offset}
+            raise
         tracks = [
             _map_track(item["track"])
             for item in data["items"]
             if item["track"] is not None  # local files have null track
         ]
-        return {"items": tracks, "total": data["total"]}
+        return {"items": tracks, "total": data["total"], "limit": limit, "offset": offset}
 
-    async def search_tracks(self, query: str, limit: int = 20, offset: int = 0) -> dict:
+    async def search_tracks(self, query: str, limit: int = 10, offset: int = 0) -> dict:
+        # Spotify caps search results at 10 for apps in development mode
+        limit = min(limit, 10)
         data = await self._get(
             "/search",
             {"q": query, "type": "track", "limit": limit, "offset": offset},
@@ -121,10 +141,11 @@ class SpotifyClient:
 
 def _map_playlist(p: dict) -> dict:
     images = p.get("images") or []
+    tracks = p.get("tracks") or {}
     return {
         "id": p["id"],
         "name": p["name"],
-        "track_count": p["tracks"]["total"],
+        "track_count": tracks.get("total", 0),
         "image_url": images[0]["url"] if images else None,
     }
 

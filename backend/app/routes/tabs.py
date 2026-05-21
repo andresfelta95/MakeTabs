@@ -8,7 +8,7 @@ GET  /tabs/track/{spotify_id} — get cached tab by Spotify track ID
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,11 +51,18 @@ async def generate_tabs(
         select(TabGeneration)
         .where(TabGeneration.track_id == track.id)
         .order_by(TabGeneration.created_at.desc())
+        .limit(1)
     )
     tab_gen = result.scalar_one_or_none()
 
-    if tab_gen is None or tab_gen.status == "failed":
-        tab_gen = TabGeneration(track_id=track.id, status="pending")
+    CURRENT_ALGORITHM = "2.3.0"
+    needs_reprocess = (
+        tab_gen is None
+        or tab_gen.status == "failed"
+        or (tab_gen.status == "done" and tab_gen.algorithm_version != CURRENT_ALGORITHM)
+    )
+    if needs_reprocess:
+        tab_gen = TabGeneration(track_id=track.id, status="pending", algorithm_version=CURRENT_ALGORITHM)
         db.add(tab_gen)
         await db.flush()
 
@@ -96,12 +103,38 @@ async def get_tab_by_spotify_id(
         select(TabGeneration)
         .where(TabGeneration.track_id == track.id)
         .order_by(TabGeneration.created_at.desc())
+        .limit(1)
     )
     tab_gen = result.scalar_one_or_none()
     if not tab_gen:
         raise HTTPException(status_code=404, detail="No tab generated for this track yet")
 
     return _tab_job_out(tab_gen, track)
+
+
+@router.get("/statuses")
+async def get_tab_statuses(
+    ids: str = Query(...),
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return tab status for a comma-separated list of Spotify track IDs."""
+    spotify_ids = [i.strip() for i in ids.split(",") if i.strip()]
+    if not spotify_ids:
+        return {}
+
+    result = await db.execute(
+        select(Track.spotify_id, TabGeneration.status, TabGeneration.id)
+        .join(TabGeneration, TabGeneration.track_id == Track.id)
+        .where(Track.spotify_id.in_(spotify_ids))
+        .order_by(TabGeneration.created_at.desc())
+    )
+
+    statuses: dict = {}
+    for row in result:
+        if row.spotify_id not in statuses:
+            statuses[row.spotify_id] = {"status": row.status, "job_id": str(row.id)}
+    return statuses
 
 
 @router.get("/{job_id}", response_model=TabJobOut)
@@ -135,6 +168,7 @@ def _tab_job_out(tab_gen: TabGeneration, track: Track) -> dict:
     return TabJobOut(
         job_id=tab_gen.id,
         status=tab_gen.status,
+        current_step=tab_gen.current_step,
         has_guitar=track.has_guitar,
         tab_data=tab_gen.tab_data,
         error=tab_gen.error_message,

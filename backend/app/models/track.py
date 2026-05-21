@@ -24,4 +24,4 @@ class Track(Base):
     # Null = not yet analyzed. True/False = result of guitar detection.
     has_guitar: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

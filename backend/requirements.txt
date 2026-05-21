@@ -20,9 +20,13 @@ pydantic-settings==2.6.1
 python-dotenv==1.0.1
 
 # Audio processing
-yt-dlp==2024.12.13
+yt-dlp>=2026.3.17
+torchcodec
 demucs==4.0.1
 basic-pitch==0.4.0
 librosa==0.10.2
 soundfile==0.12.1
 numpy==1.26.4
+
+# Lyrics
+lyricsgenius==3.0.1

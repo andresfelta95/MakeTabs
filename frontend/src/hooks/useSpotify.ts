@@ -5,6 +5,7 @@ import {
   searchTracks,
   generateTabs,
   getTabJob,
+  getTabStatuses,
 } from "../api/spotify";
 
 export function usePlaylists(limit = 20, offset = 0) {
@@ -35,11 +36,21 @@ export function useTabJob(jobId: string | null) {
     queryKey: ["tab-job", jobId],
     queryFn: () => getTabJob(jobId!),
     enabled: !!jobId,
-    // Poll every 2 seconds while job is pending/processing
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "pending" || status === "processing" ? 2000 : false;
     },
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useTrackTabStatuses(spotifyIds: string[]) {
+  const key = spotifyIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["tab-statuses", key],
+    queryFn: () => getTabStatuses(spotifyIds),
+    enabled: spotifyIds.length > 0,
+    staleTime: 10_000,
   });
 }
 
@@ -49,6 +60,7 @@ export function useGenerateTabs() {
     mutationFn: generateTabs,
     onSuccess: (data) => {
       queryClient.setQueryData(["tab-job", data.job_id], data);
+      queryClient.invalidateQueries({ queryKey: ["tab-statuses"] });
     },
   });
 }

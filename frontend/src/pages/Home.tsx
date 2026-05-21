@@ -4,7 +4,7 @@ import Layout from "../components/Layout";
 import SearchBar from "../components/SearchBar";
 import PlaylistList from "../components/PlaylistList";
 import TrackCard from "../components/TrackCard";
-import { usePlaylists, usePlaylistTracks, useSearchTracks, useGenerateTabs } from "../hooks/useSpotify";
+import { usePlaylists, usePlaylistTracks, useSearchTracks, useGenerateTabs, useTrackTabStatuses } from "../hooks/useSpotify";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -19,6 +19,9 @@ export default function Home() {
 
   const isSearching = searchQuery.length > 1;
   const tracks = isSearching ? searchResults?.items : playlistTracks?.items;
+
+  const spotifyIds = (tracks ?? []).map((t) => t.spotify_id);
+  const { data: tabStatuses } = useTrackTabStatuses(spotifyIds);
 
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q);
@@ -78,7 +81,13 @@ export default function Home() {
           )}
           {!isSearching && !selectedPlaylistId && (
             <div className="text-center py-20 text-gray-600">
-              <p>Select a playlist or search for a song</p>
+              <p>Search for a song to generate guitar tabs</p>
+            </div>
+          )}
+          {!isSearching && selectedPlaylistId && tracks && tracks.length === 0 && (
+            <div className="text-center py-20 text-gray-500">
+              <p className="text-sm">Playlist tracks unavailable</p>
+              <p className="text-xs mt-1 text-gray-600">Use the search bar instead</p>
             </div>
           )}
 
@@ -90,6 +99,7 @@ export default function Home() {
                   track={track}
                   onGenerateTabs={handleGenerateTabs}
                   isLoading={loadingTrackId === track.spotify_id}
+                  tabInfo={tabStatuses?.[track.spotify_id]}
                 />
               ))}
             </div>

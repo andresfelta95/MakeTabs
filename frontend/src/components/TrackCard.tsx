@@ -1,9 +1,10 @@
-import type { Track } from "../types";
+import type { CachedTabInfo, Track } from "../types";
 
 interface TrackCardProps {
   track: Track;
   onGenerateTabs: (spotifyId: string) => void;
   isLoading?: boolean;
+  tabInfo?: CachedTabInfo;
 }
 
 function formatDuration(ms: number | null): string {
@@ -14,7 +15,8 @@ function formatDuration(ms: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function TrackCard({ track, onGenerateTabs, isLoading }: TrackCardProps) {
+export default function TrackCard({ track, onGenerateTabs, isLoading, tabInfo }: TrackCardProps) {
+  const hasCachedTab = tabInfo?.status === "done";
   return (
     <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-spotify-card transition-colors group">
       {track.image_url ? (
@@ -42,13 +44,19 @@ export default function TrackCard({ track, onGenerateTabs, isLoading }: TrackCar
       <button
         onClick={() => onGenerateTabs(track.spotify_id)}
         disabled={isLoading}
-        className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold
-                   bg-spotify-green text-black hover:scale-105 active:scale-95
-                   transition-transform disabled:opacity-50 disabled:cursor-not-allowed
-                   opacity-0 group-hover:opacity-100"
+        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold
+                   transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                   opacity-0 group-hover:opacity-100
+                   ${hasCachedTab
+                     ? "bg-spotify-green text-black hover:scale-105 active:scale-95"
+                     : "border border-spotify-green text-spotify-green hover:bg-spotify-green hover:text-black"
+                   }`}
       >
-        {isLoading ? "..." : "Get Tabs"}
+        {isLoading ? "..." : hasCachedTab ? "View Tab" : "Get Tabs"}
       </button>
+      {hasCachedTab && (
+        <span className="text-spotify-green text-xs flex-shrink-0 opacity-60">✓</span>
+      )}
     </div>
   );
 }

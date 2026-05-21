@@ -11,6 +11,7 @@ class GenerateTabRequest(BaseModel):
 class TabJobOut(BaseModel):
     job_id: str
     status: str  # pending | processing | done | failed
+    current_step: str | None  # downloading | separating | detecting | transcribing | building
     has_guitar: bool | None
     tab_data: dict | None
     error: str | None

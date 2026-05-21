@@ -5,19 +5,27 @@ interface PipelineStatusProps {
 }
 
 const steps = [
-  { key: "download", label: "Downloading audio" },
-  { key: "separate", label: "Separating guitar track" },
-  { key: "detect", label: "Detecting guitar" },
-  { key: "transcribe", label: "Transcribing notes" },
-  { key: "build", label: "Building tabs" },
+  { key: "downloading", label: "Downloading audio" },
+  { key: "separating", label: "Separating guitar track" },
+  { key: "detecting", label: "Detecting guitar" },
+  { key: "transcribing", label: "Transcribing notes" },
+  { key: "building", label: "Building tabs" },
 ];
 
-function getStepStatus(jobStatus: TabJob["status"], index: number) {
+const STEP_ORDER = steps.map((s) => s.key);
+
+function getStepStatus(
+  jobStatus: TabJob["status"],
+  stepKey: string,
+  currentStep: string | null,
+) {
   if (jobStatus === "done") return "done";
-  if (jobStatus === "failed") return index === 0 ? "failed" : "pending";
+  if (jobStatus === "failed") return stepKey === (currentStep ?? "downloading") ? "failed" : "pending";
   if (jobStatus === "processing") {
-    // Rough heuristic — in Phase 2 the backend can report a more granular step
-    if (index === 0) return "active";
+    const currentIdx = currentStep ? STEP_ORDER.indexOf(currentStep) : 0;
+    const stepIdx = STEP_ORDER.indexOf(stepKey);
+    if (stepIdx < currentIdx) return "done";
+    if (stepIdx === currentIdx) return "active";
     return "pending";
   }
   return "pending";
@@ -49,8 +57,8 @@ export default function PipelineStatus({ job }: PipelineStatusProps) {
       )}
 
       <div className="space-y-3">
-        {steps.map((step, i) => {
-          const status = getStepStatus(job.status, i);
+        {steps.map((step) => {
+          const status = getStepStatus(job.status, step.key, job.current_step);
           return (
             <div key={step.key} className="flex items-center gap-3">
               <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs

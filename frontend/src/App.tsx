@@ -4,6 +4,7 @@ import { useAuth } from "./hooks/useAuth";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import TabViewer from "./pages/TabViewer";
+import Callback from "./pages/Callback";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ export default function App() {
               </AuthGuard>
             }
           />
+          <Route path="/callback" element={<Callback />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
