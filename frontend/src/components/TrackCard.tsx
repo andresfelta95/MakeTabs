@@ -3,7 +3,9 @@ import type { CachedTabInfo, Track } from "../types";
 interface TrackCardProps {
   track: Track;
   onGenerateTabs: (spotifyId: string) => void;
+  onGenerateChiptune?: (spotifyId: string) => void;
   isLoading?: boolean;
+  chiptuneLoading?: boolean;
   tabInfo?: CachedTabInfo;
 }
 
@@ -15,7 +17,7 @@ function formatDuration(ms: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function TrackCard({ track, onGenerateTabs, isLoading, tabInfo }: TrackCardProps) {
+export default function TrackCard({ track, onGenerateTabs, onGenerateChiptune, isLoading, chiptuneLoading, tabInfo }: TrackCardProps) {
   const hasCachedTab = tabInfo?.status === "done";
 
   return (
@@ -47,19 +49,34 @@ export default function TrackCard({ track, onGenerateTabs, isLoading, tabInfo }:
         <span className="text-accent text-xs flex-shrink-0" title="Tab available">✓</span>
       )}
 
-      <button
-        onClick={() => onGenerateTabs(track.spotify_id)}
-        disabled={isLoading}
-        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold
-                   transition-all disabled:opacity-50 disabled:cursor-not-allowed
-                   sm:opacity-0 sm:group-hover:opacity-100
-                   ${hasCachedTab
-                     ? "bg-accent text-black hover:scale-105 active:scale-95"
-                     : "border border-accent text-accent hover:bg-accent hover:text-black"
-                   }`}
-      >
-        {isLoading ? "…" : hasCachedTab ? "View Tab" : "Get Tabs"}
-      </button>
+      <div className="flex gap-1.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+        <button
+          onClick={() => onGenerateTabs(track.spotify_id)}
+          disabled={isLoading}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold
+                     transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                     ${hasCachedTab
+                       ? "bg-accent text-black hover:scale-105 active:scale-95"
+                       : "border border-accent text-accent hover:bg-accent hover:text-black"
+                     }`}
+        >
+          {isLoading ? "…" : hasCachedTab ? "View Tab" : "Get Tabs"}
+        </button>
+
+        {onGenerateChiptune && (
+          <button
+            onClick={() => onGenerateChiptune(track.spotify_id)}
+            disabled={chiptuneLoading}
+            title="Generate 16-bit chiptune version"
+            className="px-3 py-1.5 rounded-full text-xs font-semibold
+                       border border-purple-400 text-purple-400
+                       hover:bg-purple-400 hover:text-black
+                       transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {chiptuneLoading ? "…" : "16-bit"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

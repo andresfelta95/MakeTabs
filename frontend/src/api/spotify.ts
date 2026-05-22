@@ -1,5 +1,5 @@
 import client from "./client";
-import type { PaginatedPlaylists, PaginatedTracks, TabJob, TabStatusMap } from "../types";
+import type { ChiptuneJob, PaginatedPlaylists, PaginatedTracks, TabJob, TabStatusMap } from "../types";
 
 export const getPlaylists = async (limit = 20, offset = 0): Promise<PaginatedPlaylists> => {
   const { data } = await client.get<PaginatedPlaylists>("/spotify/playlists", {
@@ -52,5 +52,22 @@ export const getTabStatuses = async (spotifyIds: string[]): Promise<TabStatusMap
 
 export const getTabHistory = async (): Promise<TabJob[]> => {
   const { data } = await client.get<TabJob[]>("/tabs/history");
+  return data;
+};
+
+export const generateChiptune = async (spotifyTrackId: string): Promise<ChiptuneJob> => {
+  const { data } = await client.post<ChiptuneJob>("/chiptune/generate", {
+    spotify_track_id: spotifyTrackId,
+  });
+  return data;
+};
+
+export const getChiptuneJob = async (jobId: string): Promise<ChiptuneJob> => {
+  const { data } = await client.get<ChiptuneJob>(`/chiptune/${jobId}`);
+  return data;
+};
+
+export const getChiptuneHistory = async (): Promise<ChiptuneJob[]> => {
+  const { data } = await client.get<ChiptuneJob[]>("/chiptune/history");
   return data;
 };

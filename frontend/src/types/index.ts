@@ -94,3 +94,55 @@ export interface CachedTabInfo {
 }
 
 export type TabStatusMap = Record<string, CachedTabInfo>;
+
+// ── Chiptune types ────────────────────────────────────────────────────────────
+
+export interface ChiptuneNote {
+  pitch: number; // MIDI note number
+  beat: number;  // 0–7 (eighth-note slot)
+}
+
+export interface ChiptuneMeasure {
+  notes: ChiptuneNote[];
+}
+
+export interface ChiptuneSection {
+  name: string;
+  measures: ChiptuneMeasure[];
+}
+
+export interface DrumEvent {
+  measure: number;
+  beat: number;
+  type: "kick" | "snare" | "hihat";
+}
+
+export interface ChiptuneTonalTrack {
+  waveform: "square" | "triangle" | "pulse" | "sawtooth";
+  sections: ChiptuneSection[];
+}
+
+export interface ChiptuneDrumTrack {
+  waveform: "noise";
+  patterns: DrumEvent[];
+}
+
+export interface ChiptuneData {
+  bpm: number;
+  tracks: {
+    melody: ChiptuneTonalTrack;
+    bass: ChiptuneTonalTrack;
+    drums: ChiptuneDrumTrack;
+  };
+}
+
+export interface ChiptuneJob {
+  job_id: string;
+  status: TabStatus;
+  current_step: string | null;
+  chiptune_data: ChiptuneData | null;
+  error: string | null;
+  track: Track | null;
+  created_at: string;
+  completed_at: string | null;
+}

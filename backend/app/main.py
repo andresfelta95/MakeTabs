@@ -7,8 +7,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import engine
+from app.models.chiptune import ChiptuneGeneration
 from app.models.tab import TabGeneration
-from app.routes import auth, spotify, tabs
+from app.routes import auth, chiptune, spotify, tabs
 
 
 @asynccontextmanager
@@ -18,6 +19,11 @@ async def lifespan(app: FastAPI):
         await conn.execute(
             update(TabGeneration)
             .where(TabGeneration.status == "processing")
+            .values(status="failed", error_message="Job interrupted by server restart")
+        )
+        await conn.execute(
+            update(ChiptuneGeneration)
+            .where(ChiptuneGeneration.status == "processing")
             .values(status="failed", error_message="Job interrupted by server restart")
         )
     yield
@@ -50,6 +56,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(spotify.router)
 app.include_router(tabs.router)
+app.include_router(chiptune.router)
 
 
 @app.get("/health")

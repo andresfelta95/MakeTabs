@@ -7,6 +7,7 @@ import TabCard from "../components/TabCard";
 import {
   useSearchTracks,
   useGenerateTabs,
+  useGenerateChiptune,
   useTrackTabStatuses,
   useTabHistory,
 } from "../hooks/useSpotify";
@@ -15,10 +16,12 @@ export default function Home() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
+  const [chiptuneLoadingId, setChiptuneLoadingId] = useState<string | null>(null);
 
   const { data: searchResults } = useSearchTracks(searchQuery);
   const { data: history, isLoading: historyLoading } = useTabHistory();
-  const generateTabs = useGenerateTabs();
+  const generateTabs    = useGenerateTabs();
+  const generateChiptune = useGenerateChiptune();
 
   const isSearching = searchQuery.length > 1;
   const tracks = searchResults?.items ?? [];
@@ -34,6 +37,16 @@ export default function Home() {
       navigate(`/tabs/${job.job_id}`);
     } finally {
       setLoadingTrackId(null);
+    }
+  };
+
+  const handleGenerateChiptune = async (spotifyId: string) => {
+    setChiptuneLoadingId(spotifyId);
+    try {
+      const job = await generateChiptune.mutateAsync(spotifyId);
+      navigate(`/chiptune/${job.job_id}`);
+    } finally {
+      setChiptuneLoadingId(null);
     }
   };
 
@@ -57,7 +70,9 @@ export default function Home() {
                   key={track.spotify_id}
                   track={track}
                   onGenerateTabs={handleGenerateTabs}
+                  onGenerateChiptune={handleGenerateChiptune}
                   isLoading={loadingTrackId === track.spotify_id}
+                  chiptuneLoading={chiptuneLoadingId === track.spotify_id}
                   tabInfo={tabStatuses?.[track.spotify_id]}
                 />
               ))}
