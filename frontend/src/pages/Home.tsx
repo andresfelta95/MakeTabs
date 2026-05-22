@@ -4,12 +4,14 @@ import Layout from "../components/Layout";
 import SearchBar from "../components/SearchBar";
 import TrackCard from "../components/TrackCard";
 import TabCard from "../components/TabCard";
+import ChiptuneCard from "../components/ChiptuneCard";
 import {
   useSearchTracks,
   useGenerateTabs,
   useGenerateChiptune,
   useTrackTabStatuses,
   useTabHistory,
+  useChiptuneHistory,
 } from "../hooks/useSpotify";
 
 export default function Home() {
@@ -17,9 +19,11 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
   const [chiptuneLoadingId, setChiptuneLoadingId] = useState<string | null>(null);
+  const [chiptuneError, setChiptuneError] = useState<string | null>(null);
 
   const { data: searchResults } = useSearchTracks(searchQuery);
   const { data: history, isLoading: historyLoading } = useTabHistory();
+  const { data: chiptuneHistory, isLoading: chiptuneHistoryLoading } = useChiptuneHistory();
   const generateTabs    = useGenerateTabs();
   const generateChiptune = useGenerateChiptune();
 
@@ -42,9 +46,13 @@ export default function Home() {
 
   const handleGenerateChiptune = async (spotifyId: string) => {
     setChiptuneLoadingId(spotifyId);
+    setChiptuneError(null);
     try {
       const job = await generateChiptune.mutateAsync(spotifyId);
       navigate(`/chiptune/${job.job_id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setChiptuneError(`Chiptune error: ${msg}`);
     } finally {
       setChiptuneLoadingId(null);
     }
@@ -56,6 +64,12 @@ export default function Home() {
       <div className="mb-8">
         <SearchBar onSearch={handleSearch} />
       </div>
+
+      {chiptuneError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+          {chiptuneError}
+        </div>
+      )}
 
       {/* Search results */}
       {isSearching && (
@@ -81,8 +95,9 @@ export default function Home() {
         </section>
       )}
 
-      {/* My Tabs library */}
+      {/* My Tabs + 16-bit library */}
       {!isSearching && (
+        <>
         <section>
           <SectionHeader icon="🎸" title="My Tabs" />
 
@@ -110,6 +125,36 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* My 16-bit library */}
+        <section className="mt-10">
+          <SectionHeader icon="🎮" title="My 16-bit" />
+
+          {chiptuneHistoryLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="rounded-xl bg-card animate-pulse aspect-[3/4]" />
+              ))}
+            </div>
+          )}
+
+          {!chiptuneHistoryLoading && (!chiptuneHistory || chiptuneHistory.length === 0) && (
+            <div className="text-center py-10">
+              <div className="text-4xl mb-3">🎮</div>
+              <p className="text-primary font-semibold mb-1">No 16-bit songs yet</p>
+              <p className="text-secondary text-sm">Search for a song and hit the 16-bit button</p>
+            </div>
+          )}
+
+          {!chiptuneHistoryLoading && chiptuneHistory && chiptuneHistory.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+              {chiptuneHistory.map((job) => (
+                <ChiptuneCard key={job.job_id} job={job} />
+              ))}
+            </div>
+          )}
+        </section>
+        </>
       )}
     </Layout>
   );

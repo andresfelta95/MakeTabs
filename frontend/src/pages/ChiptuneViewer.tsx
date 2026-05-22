@@ -109,7 +109,7 @@ export default function ChiptuneViewer() {
 
       {job.status === "done" && job.chiptune_data && (
         <div className="space-y-4">
-          <ChiptunePlayer data={job.chiptune_data} />
+          <ChiptunePlayer data={job.chiptune_data} title={job.track?.title} />
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">

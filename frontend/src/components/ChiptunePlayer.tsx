@@ -123,14 +123,77 @@ function fmt(secs: number): string {
 
 interface ChiptunePlayerProps {
   data: ChiptuneData;
+  title?: string;
 }
 
 type State = "idle" | "playing" | "paused";
 
-export default function ChiptunePlayer({ data }: ChiptunePlayerProps) {
-  const [status, setStatus]     = useState<State>("idle");
-  const [progress, setProgress] = useState(0);
-  const [muted, setMuted]       = useState<Record<string, boolean>>({
+function encodeWav(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate  = buffer.sampleRate;
+  const numSamples  = buffer.length;
+  const bytesPerSample = 2;
+  const dataLen = numSamples * numChannels * bytesPerSample;
+  const ab = new ArrayBuffer(44 + dataLen);
+  const view = new DataView(ab);
+
+  const write = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + dataLen, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, dataLen, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return new Blob([ab], { type: "audio/wav" });
+}
+
+async function renderToWav(
+  melody: ScheduledNote[],
+  bass: ScheduledNote[],
+  drums: ScheduledDrum[],
+  total: number,
+  muted: Record<string, boolean>,
+): Promise<Blob> {
+  const sampleRate = 22050;
+  const offlineAC = new OfflineAudioContext(1, Math.ceil(total * sampleRate), sampleRate);
+
+  if (!muted.melody) {
+    for (const note of melody) playTone(offlineAC as unknown as AudioContext, note, note.time);
+  }
+  if (!muted.bass) {
+    for (const note of bass) playTone(offlineAC as unknown as AudioContext, note, note.time);
+  }
+  if (!muted.drums) {
+    for (const drum of drums) playDrum(offlineAC as unknown as AudioContext, drum.type, drum.time);
+  }
+
+  const rendered = await offlineAC.startRendering();
+  return encodeWav(rendered);
+}
+
+export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
+  const [status, setStatus]       = useState<State>("idle");
+  const [progress, setProgress]   = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [muted, setMuted]         = useState<Record<string, boolean>>({
     melody: false, bass: false, drums: false,
   });
 
@@ -281,6 +344,22 @@ export default function ChiptunePlayer({ data }: ChiptunePlayerProps) {
     setMuted(prev => ({ ...prev, [track]: !prev[track] }));
   }
 
+  async function handleDownload() {
+    setExporting(true);
+    try {
+      const blob = await renderToWav(melody, bass, drums, total, muted);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = (title ?? "chiptune").replace(/[^a-z0-9_\- ]/gi, "_");
+      a.download = `${safeName}_16bit.wav`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const elapsed = progress * total;
   const trackKeys = ["melody", "bass", "drums"] as const;
   const trackLabels = { melody: "Melody", bass: "Bass", drums: "Drums" };
@@ -325,7 +404,7 @@ export default function ChiptunePlayer({ data }: ChiptunePlayerProps) {
         <span className="text-xs text-secondary font-mono w-10">{fmt(total)}</span>
       </div>
 
-      {/* Track mute toggles */}
+      {/* Track mute toggles + download */}
       <div className="flex items-center gap-2 flex-wrap">
         {trackKeys.map(key => (
           <button
@@ -341,6 +420,31 @@ export default function ChiptunePlayer({ data }: ChiptunePlayerProps) {
           </button>
         ))}
         <span className="text-xs text-secondary ml-1">tap to mute</span>
+
+        <button
+          onClick={handleDownload}
+          disabled={exporting}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
+                     border border-purple-400/40 text-purple-400 hover:bg-purple-400/10
+                     disabled:opacity-50 disabled:cursor-wait transition-colors"
+        >
+          {exporting ? (
+            <>
+              <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.3"/>
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+              </svg>
+              Rendering…
+            </>
+          ) : (
+            <>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v13M5 16l7 7 7-7"/><line x1="3" y1="23" x2="21" y2="23"/>
+              </svg>
+              WAV
+            </>
+          )}
+        </button>
       </div>
 
       <p className="text-xs text-secondary flex items-center gap-1">
