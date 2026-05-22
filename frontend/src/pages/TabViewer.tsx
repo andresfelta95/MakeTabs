@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import PipelineStatus from "../components/PipelineStatus";
+import TabPlayer from "../components/TabPlayer";
 import { useTabJob } from "../hooks/useSpotify";
 import type { GuitarTab, LyricsSection, TabData, TabSection } from "../types";
 
@@ -14,7 +15,7 @@ export default function TabViewer() {
     return (
       <Layout>
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-spotify-green border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         </div>
       </Layout>
     );
@@ -24,7 +25,7 @@ export default function TabViewer() {
     <Layout>
       <button
         onClick={() => navigate(-1)}
-        className="text-sm text-gray-400 hover:text-white mb-6 flex items-center gap-2 transition-colors"
+        className="text-sm text-secondary hover:text-primary mb-6 flex items-center gap-2 transition-colors"
       >
         ← Back
       </button>
@@ -45,11 +46,11 @@ export default function TabViewer() {
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             {job.track?.image_url && (
-              <img src={job.track.image_url} alt="" className="w-16 h-16 rounded" />
+              <img src={job.track.image_url} alt="" className="w-16 h-16 rounded-lg shadow" />
             )}
             <div>
-              <h2 className="text-xl font-bold text-white">{job.track?.title}</h2>
-              <p className="text-gray-400">{job.track?.artist}</p>
+              <h2 className="text-xl font-bold text-primary">{job.track?.title}</h2>
+              <p className="text-secondary">{job.track?.artist}</p>
             </div>
           </div>
           <TabDisplay tab={job.tab_data} />
@@ -66,17 +67,17 @@ function TabDisplay({ tab }: { tab: TabData }) {
   if (tab.guitars && tab.guitars.length > 0) {
     const guitar = tab.guitars[activeGuitar];
     return (
-      <div>
+      <div className="space-y-4">
         {tab.guitars.length > 1 && (
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2">
             {tab.guitars.map((g, i) => (
               <button
                 key={i}
                 onClick={() => setActiveGuitar(i)}
                 className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors
                   ${activeGuitar === i
-                    ? "bg-spotify-green text-black"
-                    : "border border-gray-600 text-gray-400 hover:border-gray-400"
+                    ? "bg-accent text-black"
+                    : "border border-theme text-secondary hover:text-primary"
                   }`}
               >
                 {g.name}
@@ -84,6 +85,7 @@ function TabDisplay({ tab }: { tab: TabData }) {
             ))}
           </div>
         )}
+        <TabPlayer guitar={guitar} bpm={tab.bpm} />
         <AsciiTab
           guitar={guitar}
           lyricsSections={tab.lyrics_sections ?? []}
@@ -96,13 +98,17 @@ function TabDisplay({ tab }: { tab: TabData }) {
 
   // v1 schema fallback
   if (tab.sections) {
+    const guitar = { name: "Guitar", sections: tab.sections };
     return (
-      <AsciiTab
-        guitar={{ name: "Guitar", sections: tab.sections }}
-        lyricsSections={[]}
-        tuning={tab.tuning}
-        bpm={tab.bpm}
-      />
+      <div className="space-y-4">
+        <TabPlayer guitar={guitar} bpm={tab.bpm} />
+        <AsciiTab
+          guitar={guitar}
+          lyricsSections={[]}
+          tuning={tab.tuning}
+          bpm={tab.bpm}
+        />
+      </div>
     );
   }
 
@@ -129,8 +135,8 @@ function AsciiTab({ guitar, lyricsSections, tuning, bpm }: AsciiTabProps) {
   let lastLyricsIdx = -1;
 
   return (
-    <div className="bg-spotify-black rounded-xl p-6 overflow-x-auto">
-      <div className="flex items-center gap-6 mb-6 text-sm text-gray-400">
+    <div className="bg-elevated border border-theme rounded-xl p-6 overflow-x-auto">
+      <div className="flex items-center gap-6 mb-6 text-sm text-secondary">
         <span>Tuning: {tuning.join(" ")}</span>
         <span>BPM: {bpm}</span>
       </div>
@@ -147,21 +153,21 @@ function AsciiTab({ guitar, lyricsSections, tuning, bpm }: AsciiTabProps) {
         return (
           <div key={si} className="mb-10">
             {lyrics && (
-              <div className="mb-3 border-l-2 border-spotify-green pl-3">
-                <p className="text-xs font-bold text-spotify-green uppercase tracking-wider mb-1">
+              <div className="mb-3 border-l-2 border-accent pl-3">
+                <p className="text-xs font-bold text-accent uppercase tracking-wider mb-1">
                   {lyrics.name}
                 </p>
-                <p className="text-xs text-gray-500 whitespace-pre-line leading-relaxed">
+                <p className="text-xs text-secondary whitespace-pre-line leading-relaxed">
                   {lyrics.text}
                 </p>
               </div>
             )}
 
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">
               {section.name}
             </p>
 
-            <pre className="font-mono text-sm text-gray-300 leading-relaxed whitespace-pre">
+            <pre className="font-mono text-sm text-primary leading-relaxed whitespace-pre">
               {renderSection(section, strings)}
             </pre>
           </div>

@@ -88,6 +88,31 @@ async def generate_tabs(
     return _tab_job_out(tab_gen, track)
 
 
+@router.get("/history", response_model=list[TabJobOut])
+async def get_tab_history(
+    limit: int = Query(30, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current user's tab history (most recently requested first, deduped by track)."""
+    result = await db.execute(
+        select(TabGeneration, Track)
+        .join(UserTabRequest, UserTabRequest.tab_generation_id == TabGeneration.id)
+        .join(Track, Track.id == TabGeneration.track_id)
+        .where(UserTabRequest.user_id == user.id)
+        .order_by(UserTabRequest.requested_at.desc())
+    )
+    seen: set[str] = set()
+    tabs: list[dict] = []
+    for tab_gen, track in result:
+        if track.id not in seen:
+            seen.add(track.id)
+            tabs.append(_tab_job_out(tab_gen, track))
+        if len(tabs) >= limit:
+            break
+    return tabs
+
+
 @router.get("/track/{spotify_track_id}", response_model=TabJobOut)
 async def get_tab_by_spotify_id(
     spotify_track_id: str,

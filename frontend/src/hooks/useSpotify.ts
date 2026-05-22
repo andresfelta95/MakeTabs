@@ -6,6 +6,7 @@ import {
   generateTabs,
   getTabJob,
   getTabStatuses,
+  getTabHistory,
 } from "../api/spotify";
 
 export function usePlaylists(limit = 20, offset = 0) {
@@ -61,6 +62,21 @@ export function useGenerateTabs() {
     onSuccess: (data) => {
       queryClient.setQueryData(["tab-job", data.job_id], data);
       queryClient.invalidateQueries({ queryKey: ["tab-statuses"] });
+      queryClient.invalidateQueries({ queryKey: ["tab-history"] });
     },
+  });
+}
+
+export function useTabHistory() {
+  return useQuery({
+    queryKey: ["tab-history"],
+    queryFn: getTabHistory,
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? [];
+      const hasActive = jobs.some(j => j.status === "pending" || j.status === "processing");
+      return hasActive ? 3000 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 }

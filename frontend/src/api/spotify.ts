@@ -49,3 +49,8 @@ export const getTabStatuses = async (spotifyIds: string[]): Promise<TabStatusMap
   });
   return data;
 };
+
+export const getTabHistory = async (): Promise<TabJob[]> => {
+  const { data } = await client.get<TabJob[]>("/tabs/history");
+  return data;
+};

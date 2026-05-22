@@ -2,31 +2,30 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import SearchBar from "../components/SearchBar";
-import PlaylistList from "../components/PlaylistList";
 import TrackCard from "../components/TrackCard";
-import { usePlaylists, usePlaylistTracks, useSearchTracks, useGenerateTabs, useTrackTabStatuses } from "../hooks/useSpotify";
+import TabCard from "../components/TabCard";
+import {
+  useSearchTracks,
+  useGenerateTabs,
+  useTrackTabStatuses,
+  useTabHistory,
+} from "../hooks/useSpotify";
 
 export default function Home() {
   const navigate = useNavigate();
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
 
-  const { data: playlists, isLoading: playlistsLoading } = usePlaylists();
-  const { data: playlistTracks } = usePlaylistTracks(selectedPlaylistId);
   const { data: searchResults } = useSearchTracks(searchQuery);
+  const { data: history, isLoading: historyLoading } = useTabHistory();
   const generateTabs = useGenerateTabs();
 
   const isSearching = searchQuery.length > 1;
-  const tracks = isSearching ? searchResults?.items : playlistTracks?.items;
-
-  const spotifyIds = (tracks ?? []).map((t) => t.spotify_id);
+  const tracks = searchResults?.items ?? [];
+  const spotifyIds = tracks.map((t) => t.spotify_id);
   const { data: tabStatuses } = useTrackTabStatuses(spotifyIds);
 
-  const handleSearch = useCallback((q: string) => {
-    setSearchQuery(q);
-    if (q) setSelectedPlaylistId(null);
-  }, []);
+  const handleSearch = useCallback((q: string) => setSearchQuery(q), []);
 
   const handleGenerateTabs = async (spotifyId: string) => {
     setLoadingTrackId(spotifyId);
@@ -40,59 +39,19 @@ export default function Home() {
 
   return (
     <Layout>
-      <div className="mb-6">
+      {/* Search */}
+      <div className="mb-8">
         <SearchBar onSearch={handleSearch} />
       </div>
 
-      <div className="flex gap-6">
-        {/* Sidebar — playlists */}
-        {!isSearching && (
-          <aside className="w-64 flex-shrink-0">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Your Playlists
-            </h2>
-            {playlistsLoading ? (
-              <div className="space-y-2">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-14 rounded-lg bg-spotify-card animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <PlaylistList
-                playlists={playlists?.items ?? []}
-                selectedId={selectedPlaylistId}
-                onSelect={setSelectedPlaylistId}
-              />
-            )}
-          </aside>
-        )}
-
-        {/* Main — tracks */}
-        <div className="flex-1 min-w-0">
-          {isSearching && (
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Search results for "{searchQuery}"
-            </h2>
-          )}
-          {!isSearching && selectedPlaylistId && (
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Tracks
-            </h2>
-          )}
-          {!isSearching && !selectedPlaylistId && (
-            <div className="text-center py-20 text-gray-600">
-              <p>Search for a song to generate guitar tabs</p>
-            </div>
-          )}
-          {!isSearching && selectedPlaylistId && tracks && tracks.length === 0 && (
-            <div className="text-center py-20 text-gray-500">
-              <p className="text-sm">Playlist tracks unavailable</p>
-              <p className="text-xs mt-1 text-gray-600">Use the search bar instead</p>
-            </div>
-          )}
-
-          {tracks && tracks.length > 0 && (
-            <div className="space-y-1">
+      {/* Search results */}
+      {isSearching && (
+        <section className="mb-10">
+          <SectionHeader icon="🔍" title={`Results for "${searchQuery}"`} />
+          {tracks.length === 0 ? (
+            <p className="text-secondary text-sm py-8 text-center">No songs found</p>
+          ) : (
+            <div className="space-y-1 mt-3">
               {tracks.map((track) => (
                 <TrackCard
                   key={track.spotify_id}
@@ -104,12 +63,48 @@ export default function Home() {
               ))}
             </div>
           )}
+        </section>
+      )}
 
-          {tracks && tracks.length === 0 && (
-            <p className="text-gray-500 text-sm py-10 text-center">No tracks found</p>
+      {/* My Tabs library */}
+      {!isSearching && (
+        <section>
+          <SectionHeader icon="🎸" title="My Tabs" />
+
+          {historyLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="rounded-xl bg-card animate-pulse aspect-[3/4]" />
+              ))}
+            </div>
           )}
-        </div>
-      </div>
+
+          {!historyLoading && (!history || history.length === 0) && (
+            <div className="text-center py-16">
+              <div className="text-5xl mb-4">🎵</div>
+              <p className="text-primary font-semibold mb-1">No tabs yet</p>
+              <p className="text-secondary text-sm">Search for a song above to generate your first tab</p>
+            </div>
+          )}
+
+          {!historyLoading && history && history.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+              {history.map((job) => (
+                <TabCard key={job.job_id} job={job} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </Layout>
+  );
+}
+
+function SectionHeader({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-1">
+      <span className="text-lg">{icon}</span>
+      <h2 className="text-base font-bold text-primary tracking-tight">{title}</h2>
+    </div>
   );
 }
