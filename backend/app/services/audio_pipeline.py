@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _OPEN_MIDI = {1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64}  # E2 A2 D3 G3 B3 E4
 _TUNING_NAMES = ["E", "A", "D", "G", "B", "e"]
 _MAX_FRET = 22
-_MIN_VELOCITY = 60  # filter out very quiet (likely noise) notes
+_MIN_VELOCITY = 20  # filter out very quiet (likely noise) notes; rhythm guitar in separated stems is typically 0.2-0.5 amplitude
 
 # Tab grid resolution
 _BEATS_PER_MEASURE = 8    # eighth-note slots (quarter note = 2 slots)
@@ -147,9 +147,9 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.65,   # higher = fewer false-positive notes
-        frame_threshold=0.4,
-        minimum_note_length=100,  # ms; eliminates very short spurious notes
+        onset_threshold=0.45,   # lower threshold catches strummed chord attacks
+        frame_threshold=0.3,
+        minimum_note_length=58,   # ms; power chords can be short/palm-muted
         minimum_frequency=82.0,   # E2 — lowest open string
         maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
     )
@@ -276,7 +276,7 @@ def _needs_two_guitars(
     rhythm_role = _beat_role(rhythm_events, bpm, duration_ms)
 
     lead_is_melodic = lead_role["solo_ratio"] > 0.60    # mostly single notes
-    rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.30  # enough simultaneous notes
+    rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.20  # enough simultaneous notes
 
     logger.info(
         "Guitar roles — lead solo=%.2f chord=%.2f | rhythm solo=%.2f chord=%.2f → two=%s",
