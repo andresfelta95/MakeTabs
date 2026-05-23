@@ -185,11 +185,12 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
-    # (measure_idx, string) → {beat → (fret, velocity)} — keeps loudest per slot
-    best: dict[tuple[int, int], dict[int, tuple[int, float]]] = {}
+    # (measure_idx, string) → {beat → (fret, velocity, dur_beats)} — keeps loudest per slot
+    best: dict[tuple[int, int], dict[int, tuple[int, float, int]]] = {}
 
     for event in note_events:
         start_s = float(event[0])
+        end_s   = float(event[1])
         pitch = int(event[2])
         velocity = float(event[3])
 
@@ -202,19 +203,20 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
 
         m_idx = min(int(start_s / measure_dur), total_measures - 1)
         beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
+        dur_beats = max(1, round((end_s - start_s) / beat_dur))
         string_num, fret = pos
         key = (m_idx, string_num)
         if key not in best:
             best[key] = {}
         existing = best[key].get(beat)
         if existing is None or velocity > existing[1]:
-            best[key][beat] = (fret, velocity)
+            best[key][beat] = (fret, velocity, dur_beats)
 
     # Flatten into notes_by_measure
     notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
     for (m_idx, string_num), beats in best.items():
-        for beat, (fret, _) in beats.items():
-            notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat})
+        for beat, (fret, _, dur_beats) in beats.items():
+            notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat, "duration": dur_beats})
 
     sections = []
     for i in range(0, total_measures, _MEASURES_PER_SECTION):

@@ -44,6 +44,7 @@ export interface TabNote {
   string: number;
   fret: number;
   beat?: number;
+  duration?: number; // in beat slots (1 = eighth note, 2 = quarter, 4 = half, 8 = whole)
 }
 
 export interface TabMeasure {
