@@ -101,14 +101,14 @@ def _download_audio(work_dir: str, title: str, artist: str) -> str:
 # ── Step 2: source separation (Demucs) ───────────────────────────────────────
 
 def _separate_guitar(work_dir: str, audio_path: str) -> str:
-    """Run Demucs (htdemucs) and return path to the 'other' stem (guitar+keys)."""
+    """Run Demucs (htdemucs_6s) and return path to the dedicated 'guitar' stem."""
     out_dir = Path(work_dir) / "demucs_out"
     out_dir.mkdir()
 
     cmd = [
         "python", "-m", "demucs",
-        "-n", "htdemucs",
-        "-d", "cuda",               # use GPU if available; Demucs falls back to CPU automatically
+        "-n", "htdemucs_6s",        # 6-stem model: guitar stem is separate from piano/keys
+        "-d", "cuda",
         "--overlap", "0.4",
         "--out", str(out_dir),
         audio_path,
@@ -118,10 +118,10 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"Demucs failed:\n{result.stderr[-1000:]}")
 
-    # Output path: <out_dir>/htdemucs/audio/other.wav
-    guitar_path = out_dir / "htdemucs" / "audio" / "other.wav"
+    # Output path: <out_dir>/htdemucs_6s/audio/guitar.wav
+    guitar_path = out_dir / "htdemucs_6s" / "audio" / "guitar.wav"
     if not guitar_path.exists():
-        raise FileNotFoundError(f"Demucs other stem not found at {guitar_path}")
+        raise FileNotFoundError(f"Demucs guitar stem not found at {guitar_path}")
 
     return str(guitar_path)
 

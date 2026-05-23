@@ -49,7 +49,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.2.0"
+CURRENT_ALGORITHM = "1.3.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────
@@ -80,13 +80,13 @@ def _download_audio(work_dir: str, title: str, artist: str) -> str:
 # ── Step 2: Demucs 4-stem separation ─────────────────────────────────────────
 
 def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
-    """Run htdemucs and return paths for drums, bass, other stems."""
+    """Run htdemucs_6s and return paths for drums, bass, guitar stems."""
     out_dir = Path(work_dir) / "demucs_out"
     out_dir.mkdir()
 
     cmd = [
         "python", "-m", "demucs",
-        "-n", "htdemucs",
+        "-n", "htdemucs_6s",        # 6-stem: dedicated guitar stem separate from piano/keys
         "-d", "cuda",
         "--overlap", "0.4",
         "--out", str(out_dir),
@@ -96,9 +96,9 @@ def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
     if result.returncode != 0:
         raise RuntimeError(f"Demucs failed:\n{result.stderr[-1000:]}")
 
-    base = out_dir / "htdemucs" / "audio"
+    base = out_dir / "htdemucs_6s" / "audio"
     stems = {}
-    for name in ("drums", "bass", "other"):
+    for name in ("drums", "bass", "guitar"):
         p = base / f"{name}.wav"
         if not p.exists():
             raise FileNotFoundError(f"Demucs stem not found: {p}")
@@ -268,7 +268,7 @@ def _run_chiptune_sync(
 
             on_step("transcribing")
             melody_sections = _transcribe_tonal(
-                stems["other"], bpm, duration_ms,
+                stems["guitar"], bpm, duration_ms,
                 min_freq=150.0, max_freq=4000.0,
             )
             bass_sections = _transcribe_tonal(
