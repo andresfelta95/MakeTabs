@@ -43,13 +43,13 @@ from app.models.track import Track
 
 logger = logging.getLogger(__name__)
 
-_BEATS_PER_MEASURE = 8
+_BEATS_PER_MEASURE = 16
 _MEASURES_PER_SECTION = 4
 _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.1.0"
+CURRENT_ALGORITHM = "1.2.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────
@@ -236,9 +236,11 @@ def _estimate_bpm(audio_path: str) -> float:
     y, sr = librosa.load(audio_path, sr=None, mono=True, duration=60)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     bpm = float(tempo)
-    if bpm > 140:
+    while bpm > 160:
         bpm /= 2.0
-    return max(bpm, 60.0)
+    while bpm < 60:
+        bpm *= 2.0
+    return bpm
 
 
 # ── Synchronous pipeline ──────────────────────────────────────────────────────

@@ -40,7 +40,7 @@ _MAX_FRET = 22
 _MIN_VELOCITY = 20  # filter out very quiet (likely noise) notes; rhythm guitar in separated stems is typically 0.2-0.5 amplitude
 
 # Tab grid resolution
-_BEATS_PER_MEASURE = 8    # eighth-note slots (quarter note = 2 slots)
+_BEATS_PER_MEASURE = 16   # sixteenth-note slots (quarter note = 4 slots)
 _MEASURES_PER_SECTION = 4 # keep display width ≈ 96 chars (8 × 4 × 3)
 
 # Serialize heavy pipeline jobs — prevents OOM from concurrent Demucs runs
@@ -158,9 +158,12 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
     y, sr = librosa.load(audio_path, sr=None, mono=True)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     bpm = float(tempo) if float(tempo) > 20 else 120.0
-    # librosa often detects double-tempo; halve if unrealistically fast for guitar
-    if bpm > 140:
+    # Normalize into the 60-160 range (covers everything from slow ballads to punk)
+    # by halving or doubling in steps rather than a one-shot check
+    while bpm > 160:
         bpm /= 2.0
+    while bpm < 60:
+        bpm *= 2.0
 
     return note_events, bpm
 

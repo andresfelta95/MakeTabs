@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import type { GuitarTab } from "../types";
 
 const OPEN_MIDI: Record<number, number> = { 1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64 };
-const BEATS_PER_MEASURE = 8;
+const BEATS_PER_MEASURE = 16;
 const SCHEDULE_AHEAD = 0.5;
 const TICK_MS = 150;
 
