@@ -49,7 +49,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.3.0"
+CURRENT_ALGORITHM = "1.4.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────
@@ -233,10 +233,13 @@ def _detect_drums(drums_path: str, bpm: float, duration_ms: int) -> list[dict]:
 
 def _estimate_bpm(audio_path: str) -> float:
     import librosa
+    import numpy as np
     y, sr = librosa.load(audio_path, sr=None, mono=True, duration=60)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    bpm = float(tempo)
-    while bpm > 160:
+    tempo_frames = librosa.feature.tempo(y=y, sr=sr, aggregate=None)
+    bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
+    if bpm < 20:
+        bpm = 120.0
+    while bpm > 130:
         bpm /= 2.0
     while bpm < 60:
         bpm *= 2.0

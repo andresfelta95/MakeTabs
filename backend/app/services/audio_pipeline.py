@@ -156,11 +156,14 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
     )
 
     y, sr = librosa.load(audio_path, sr=None, mono=True)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    bpm = float(tempo) if float(tempo) > 20 else 120.0
-    # Normalize into the 60-160 range (covers everything from slow ballads to punk)
-    # by halving or doubling in steps rather than a one-shot check
-    while bpm > 160:
+    # Frame-by-frame tempo then take median — more robust than single beat_track estimate
+    tempo_frames = librosa.feature.tempo(y=y, sr=sr, aggregate=None)
+    bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
+    if bpm < 20:
+        bpm = 120.0
+    # Normalize to 60-130 BPM (typical guitar music range).
+    # librosa frequently detects double-tempo for energetic rock; halving brings it in range.
+    while bpm > 130:
         bpm /= 2.0
     while bpm < 60:
         bpm *= 2.0
