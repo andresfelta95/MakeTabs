@@ -107,8 +107,8 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
 
     cmd = [
         "python", "-m", "demucs",
-        "--two-stems", "other",     # produces: other.wav, no_other.wav
-        "-n", "htdemucs",
+        "-n", "htdemucs",           # full 4-stem: drums/bass/vocals/other — cleaner isolation than --two-stems
+        "--overlap", "0.4",         # more overlap at segment boundaries reduces edge artifacts
         "--out", str(out_dir),
         audio_path,
     ]
@@ -147,9 +147,9 @@ def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.45,   # lower threshold catches strummed chord attacks
-        frame_threshold=0.3,
-        minimum_note_length=58,   # ms; power chords can be short/palm-muted
+        onset_threshold=0.35,   # lower threshold catches strummed chord attacks
+        frame_threshold=0.25,
+        minimum_note_length=50,   # ms; power chords can be short/palm-muted
         minimum_frequency=82.0,   # E2 — lowest open string
         maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
     )
