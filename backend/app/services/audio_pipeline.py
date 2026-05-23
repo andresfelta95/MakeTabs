@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _OPEN_MIDI = {1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64}  # E2 A2 D3 G3 B3 E4
 _TUNING_NAMES = ["E", "A", "D", "G", "B", "e"]
 _MAX_FRET = 22
-_MIN_VELOCITY = 20  # filter out very quiet (likely noise) notes; rhythm guitar in separated stems is typically 0.2-0.5 amplitude
+_MIN_VELOCITY = 10  # filter out very quiet (likely noise) notes; solo notes in separated stems can be quiet
 
 # Tab grid resolution
 _BEATS_PER_MEASURE = 16   # sixteenth-note slots (quarter note = 4 slots)
@@ -118,12 +118,29 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"Demucs failed:\n{result.stderr[-1000:]}")
 
-    # Output path: <out_dir>/htdemucs_6s/audio/guitar.wav
-    guitar_path = out_dir / "htdemucs_6s" / "audio" / "guitar.wav"
+    base = out_dir / "htdemucs_6s" / "audio"
+    guitar_path = base / "guitar.wav"
+    other_path  = base / "other.wav"
     if not guitar_path.exists():
         raise FileNotFoundError(f"Demucs guitar stem not found at {guitar_path}")
 
-    return str(guitar_path)
+    # Mix guitar + other stems: htdemucs_6s sometimes routes lead guitar content
+    # (solos, high-register runs) into "other" rather than "guitar".
+    # Blending at 50% brings those notes back without heavily polluting with piano/synth
+    # (which get filtered later by _midi_to_guitar anyway).
+    import librosa
+    import soundfile as sf
+    y_g, sr = librosa.load(str(guitar_path), sr=None, mono=True)
+    if other_path.exists():
+        y_o, _ = librosa.load(str(other_path), sr=sr, mono=True)
+        n = min(len(y_g), len(y_o))
+        y_mixed = y_g[:n] + 0.5 * y_o[:n]
+    else:
+        y_mixed = y_g
+
+    mixed_path = Path(work_dir) / "guitar_mixed.wav"
+    sf.write(str(mixed_path), y_mixed, sr)
+    return str(mixed_path)
 
 
 # ── Step 3: guitar energy detection ──────────────────────────────────────────
@@ -170,7 +187,7 @@ def _transcribe(audio_path: str) -> np.ndarray:
         frame_threshold=0.25,
         minimum_note_length=50,
         minimum_frequency=82.0,   # E2 — lowest open string
-        maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
+        maximum_frequency=1300.0, # covers full 24-fret range + bends on high-e
     )
     return note_events
 
