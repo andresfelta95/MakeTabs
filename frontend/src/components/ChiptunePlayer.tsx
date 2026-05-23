@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { ChiptuneData, ChiptuneTonalTrack, DrumEvent } from "../types";
 
-const BEATS_PER_MEASURE = 16;
+const BEATS_PER_MEASURE = 8;
 const SCHEDULE_AHEAD = 0.4;
 const TICK_MS = 120;
 

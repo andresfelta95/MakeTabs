@@ -115,7 +115,7 @@ function TabDisplay({ tab }: { tab: TabData }) {
   return null;
 }
 
-const BEATS_PER_MEASURE = 16; // sixteenth-note slots
+const BEATS_PER_MEASURE = 8; // eighth-note slots
 
 function renderSlot(fret: number | null): string {
   if (fret === null) return "---";
