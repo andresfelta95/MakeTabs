@@ -40,7 +40,7 @@ _MAX_FRET = 22
 _MIN_VELOCITY = 20  # filter out very quiet (likely noise) notes; rhythm guitar in separated stems is typically 0.2-0.5 amplitude
 
 # Tab grid resolution
-_BEATS_PER_MEASURE = 8    # eighth-note slots (quarter note = 2 slots)
+_BEATS_PER_MEASURE = 16   # sixteenth-note slots (quarter note = 4 slots)
 _MEASURES_PER_SECTION = 4 # keep display width ≈ 96 chars (8 × 4 × 3)
 
 # Serialize heavy pipeline jobs — prevents OOM from concurrent Demucs runs

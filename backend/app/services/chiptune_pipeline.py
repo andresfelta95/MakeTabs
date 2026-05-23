@@ -43,13 +43,13 @@ from app.models.track import Track
 
 logger = logging.getLogger(__name__)
 
-_BEATS_PER_MEASURE = 8
+_BEATS_PER_MEASURE = 16
 _MEASURES_PER_SECTION = 4
 _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.5.0"
+CURRENT_ALGORITHM = "1.6.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────

@@ -55,7 +55,7 @@ async def generate_tabs(
     )
     tab_gen = result.scalar_one_or_none()
 
-    CURRENT_ALGORITHM = "3.2.0"
+    CURRENT_ALGORITHM = "3.3.0"
     needs_reprocess = (
         tab_gen is None
         or tab_gen.status == "failed"
