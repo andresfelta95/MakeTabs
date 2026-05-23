@@ -139,36 +139,40 @@ def _has_guitar_energy(audio_path: str, threshold: float = 0.02) -> bool:
 
 # ── Step 4: note transcription (basic-pitch) ─────────────────────────────────
 
-def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
-    """Run basic-pitch and estimate BPM. Returns (note_events, bpm)."""
+def _estimate_bpm(audio_path: str) -> float:
+    """Estimate BPM from audio. Should be called on the full mix, not a stem."""
     import librosa
-    from basic_pitch.inference import predict
-    from basic_pitch import ICASSP_2022_MODEL_PATH
-
-    _, _, note_events = predict(
-        audio_path,
-        ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.35,   # lower threshold catches strummed chord attacks
-        frame_threshold=0.25,
-        minimum_note_length=50,   # ms; power chords can be short/palm-muted
-        minimum_frequency=82.0,   # E2 — lowest open string
-        maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
-    )
-
-    y, sr = librosa.load(audio_path, sr=None, mono=True)
+    y, sr = librosa.load(audio_path, sr=None, mono=True, duration=60)
     # Frame-by-frame tempo then take median — more robust than single beat_track estimate
     tempo_frames = librosa.feature.tempo(y=y, sr=sr, aggregate=None)
     bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
     if bpm < 20:
         bpm = 120.0
     # Normalize to 60-130 BPM (typical guitar music range).
-    # librosa frequently detects double-tempo for energetic rock; halving brings it in range.
+    # librosa frequently detects double-tempo on energetic rock; halving corrects it.
     while bpm > 130:
         bpm /= 2.0
     while bpm < 60:
         bpm *= 2.0
+    logger.info("BPM detected: %.1f", bpm)
+    return bpm
 
-    return note_events, bpm
+
+def _transcribe(audio_path: str) -> np.ndarray:
+    """Run basic-pitch on the guitar stem. Returns note_events array."""
+    from basic_pitch.inference import predict
+    from basic_pitch import ICASSP_2022_MODEL_PATH
+
+    _, _, note_events = predict(
+        audio_path,
+        ICASSP_2022_MODEL_PATH,
+        onset_threshold=0.35,
+        frame_threshold=0.25,
+        minimum_note_length=50,
+        minimum_frequency=82.0,   # E2 — lowest open string
+        maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
+    )
+    return note_events
 
 
 # ── Step 5: build tab sections ────────────────────────────────────────────────
@@ -332,8 +336,11 @@ def _run_pipeline_sync(
                 logger.info("No guitar energy detected — skipping transcription")
                 return {"has_guitar": False, "tab_data": None}
 
+            # Estimate BPM from full mix — drums make beat tracking far more reliable
+            bpm = _estimate_bpm(audio)
+
             on_step("transcribing")
-            note_events, bpm = _transcribe(guitar)
+            note_events = _transcribe(guitar)
             logger.info("Transcribed. BPM=%.1f, notes=%d", bpm, len(note_events))
 
             on_step("building")
