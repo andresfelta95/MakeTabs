@@ -87,6 +87,7 @@ def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
     cmd = [
         "python", "-m", "demucs",
         "-n", "htdemucs",
+        "-d", "cuda",
         "--overlap", "0.4",
         "--out", str(out_dir),
         audio_path,

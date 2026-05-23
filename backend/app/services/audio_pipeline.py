@@ -107,8 +107,9 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
 
     cmd = [
         "python", "-m", "demucs",
-        "-n", "htdemucs",           # full 4-stem: drums/bass/vocals/other — cleaner isolation than --two-stems
-        "--overlap", "0.4",         # more overlap at segment boundaries reduces edge artifacts
+        "-n", "htdemucs",
+        "-d", "cuda",               # use GPU if available; Demucs falls back to CPU automatically
+        "--overlap", "0.4",
         "--out", str(out_dir),
         audio_path,
     ]
