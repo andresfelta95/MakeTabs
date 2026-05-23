@@ -45,11 +45,11 @@ logger = logging.getLogger(__name__)
 
 _BEATS_PER_MEASURE = 8
 _MEASURES_PER_SECTION = 4
-_MIN_VELOCITY = 50
+_MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.0.0"
+CURRENT_ALGORITHM = "1.1.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────
@@ -87,6 +87,7 @@ def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
     cmd = [
         "python", "-m", "demucs",
         "-n", "htdemucs",
+        "--overlap", "0.4",
         "--out", str(out_dir),
         audio_path,
     ]
@@ -121,9 +122,9 @@ def _transcribe_tonal(
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.6,
-        frame_threshold=0.4,
-        minimum_note_length=80,
+        onset_threshold=0.35,
+        frame_threshold=0.25,
+        minimum_note_length=50,
         minimum_frequency=min_freq,
         maximum_frequency=max_freq,
     )
