@@ -37,10 +37,10 @@ logger = logging.getLogger(__name__)
 _OPEN_MIDI = {1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64}  # E2 A2 D3 G3 B3 E4
 _TUNING_NAMES = ["E", "A", "D", "G", "B", "e"]
 _MAX_FRET = 22
-_MIN_VELOCITY = 60  # filter out very quiet (likely noise) notes
+_MIN_VELOCITY = 10  # filter out very quiet (likely noise) notes; solo notes in separated stems can be quiet
 
 # Tab grid resolution
-_BEATS_PER_MEASURE = 8    # eighth-note slots (quarter note = 2 slots)
+_BEATS_PER_MEASURE = 16   # sixteenth-note slots (quarter note = 4 slots)
 _MEASURES_PER_SECTION = 4 # keep display width ≈ 96 chars (8 × 4 × 3)
 
 # Serialize heavy pipeline jobs — prevents OOM from concurrent Demucs runs
@@ -101,14 +101,15 @@ def _download_audio(work_dir: str, title: str, artist: str) -> str:
 # ── Step 2: source separation (Demucs) ───────────────────────────────────────
 
 def _separate_guitar(work_dir: str, audio_path: str) -> str:
-    """Run Demucs (htdemucs) and return path to the 'other' stem (guitar+keys)."""
+    """Run Demucs (htdemucs_6s) and return path to the dedicated 'guitar' stem."""
     out_dir = Path(work_dir) / "demucs_out"
     out_dir.mkdir()
 
     cmd = [
         "python", "-m", "demucs",
-        "--two-stems", "other",     # produces: other.wav, no_other.wav
-        "-n", "htdemucs",
+        "-n", "htdemucs_6s",        # 6-stem model: guitar stem is separate from piano/keys
+        "-d", "cuda",
+        "--overlap", "0.4",
         "--out", str(out_dir),
         audio_path,
     ]
@@ -117,12 +118,29 @@ def _separate_guitar(work_dir: str, audio_path: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"Demucs failed:\n{result.stderr[-1000:]}")
 
-    # Output path: <out_dir>/htdemucs/audio/other.wav
-    guitar_path = out_dir / "htdemucs" / "audio" / "other.wav"
+    base = out_dir / "htdemucs_6s" / "audio"
+    guitar_path = base / "guitar.wav"
+    other_path  = base / "other.wav"
     if not guitar_path.exists():
-        raise FileNotFoundError(f"Demucs other stem not found at {guitar_path}")
+        raise FileNotFoundError(f"Demucs guitar stem not found at {guitar_path}")
 
-    return str(guitar_path)
+    # Mix guitar + other stems: htdemucs_6s sometimes routes lead guitar content
+    # (solos, high-register runs) into "other" rather than "guitar".
+    # Blending at 50% brings those notes back without heavily polluting with piano/synth
+    # (which get filtered later by _midi_to_guitar anyway).
+    import librosa
+    import soundfile as sf
+    y_g, sr = librosa.load(str(guitar_path), sr=None, mono=True)
+    if other_path.exists():
+        y_o, _ = librosa.load(str(other_path), sr=sr, mono=True)
+        n = min(len(y_g), len(y_o))
+        y_mixed = y_g[:n] + 0.5 * y_o[:n]
+    else:
+        y_mixed = y_g
+
+    mixed_path = Path(work_dir) / "guitar_mixed.wav"
+    sf.write(str(mixed_path), y_mixed, sr)
+    return str(mixed_path)
 
 
 # ── Step 3: guitar energy detection ──────────────────────────────────────────
@@ -138,30 +156,40 @@ def _has_guitar_energy(audio_path: str, threshold: float = 0.02) -> bool:
 
 # ── Step 4: note transcription (basic-pitch) ─────────────────────────────────
 
-def _transcribe(audio_path: str) -> tuple[np.ndarray, float]:
-    """Run basic-pitch and estimate BPM. Returns (note_events, bpm)."""
+def _estimate_bpm(audio_path: str) -> float:
+    """Estimate BPM from audio. Should be called on the full mix, not a stem."""
     import librosa
+    y, sr = librosa.load(audio_path, sr=None, mono=True, duration=60)
+    # Frame-by-frame tempo then take median — more robust than single beat_track estimate
+    tempo_frames = librosa.feature.tempo(y=y, sr=sr, aggregate=None)
+    bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
+    if bpm < 20:
+        bpm = 120.0
+    # Normalize to 60-130 BPM (typical guitar music range).
+    # librosa frequently detects double-tempo on energetic rock; halving corrects it.
+    while bpm > 130:
+        bpm /= 2.0
+    while bpm < 60:
+        bpm *= 2.0
+    logger.info("BPM detected: %.1f", bpm)
+    return bpm
+
+
+def _transcribe(audio_path: str) -> np.ndarray:
+    """Run basic-pitch on the guitar stem. Returns note_events array."""
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.65,   # higher = fewer false-positive notes
-        frame_threshold=0.4,
-        minimum_note_length=100,  # ms; eliminates very short spurious notes
+        onset_threshold=0.35,
+        frame_threshold=0.25,
+        minimum_note_length=50,
         minimum_frequency=82.0,   # E2 — lowest open string
-        maximum_frequency=1050.0, # ~C6 — realistic guitar ceiling
+        maximum_frequency=1300.0, # covers full 24-fret range + bends on high-e
     )
-
-    y, sr = librosa.load(audio_path, sr=None, mono=True)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    bpm = float(tempo) if float(tempo) > 20 else 120.0
-    # librosa often detects double-tempo; halve if unrealistically fast for guitar
-    if bpm > 140:
-        bpm /= 2.0
-
-    return note_events, bpm
+    return note_events
 
 
 # ── Step 5: build tab sections ────────────────────────────────────────────────
@@ -174,11 +202,12 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
-    # (measure_idx, string) → {beat → (fret, velocity)} — keeps loudest per slot
-    best: dict[tuple[int, int], dict[int, tuple[int, float]]] = {}
+    # (measure_idx, string) → {beat → (fret, velocity, dur_beats)} — keeps loudest per slot
+    best: dict[tuple[int, int], dict[int, tuple[int, float, int]]] = {}
 
     for event in note_events:
         start_s = float(event[0])
+        end_s   = float(event[1])
         pitch = int(event[2])
         velocity = float(event[3])
 
@@ -191,19 +220,20 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
 
         m_idx = min(int(start_s / measure_dur), total_measures - 1)
         beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
+        dur_beats = max(1, round((end_s - start_s) / beat_dur))
         string_num, fret = pos
         key = (m_idx, string_num)
         if key not in best:
             best[key] = {}
         existing = best[key].get(beat)
         if existing is None or velocity > existing[1]:
-            best[key][beat] = (fret, velocity)
+            best[key][beat] = (fret, velocity, dur_beats)
 
     # Flatten into notes_by_measure
     notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
     for (m_idx, string_num), beats in best.items():
-        for beat, (fret, _) in beats.items():
-            notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat})
+        for beat, (fret, _, dur_beats) in beats.items():
+            notes_by_measure[m_idx].append({"string": string_num, "fret": fret, "beat": beat, "duration": dur_beats})
 
     sections = []
     for i in range(0, total_measures, _MEASURES_PER_SECTION):
@@ -276,7 +306,7 @@ def _needs_two_guitars(
     rhythm_role = _beat_role(rhythm_events, bpm, duration_ms)
 
     lead_is_melodic = lead_role["solo_ratio"] > 0.60    # mostly single notes
-    rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.30  # enough simultaneous notes
+    rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.20  # enough simultaneous notes
 
     logger.info(
         "Guitar roles — lead solo=%.2f chord=%.2f | rhythm solo=%.2f chord=%.2f → two=%s",
@@ -300,11 +330,15 @@ def _assign_lyrics(sections: list[dict], lyrics_sections: list[dict]) -> list[di
 
 # ── Synchronous pipeline (runs in thread) ────────────────────────────────────
 
+_AUDIO_STORE = Path("/app/audio")
+
+
 def _run_pipeline_sync(
     title: str,
     artist: str,
     duration_ms: int,
     on_step,  # callable(step: str) -> None
+    tab_gen_id: str | None = None,
 ) -> dict:
     """Full blocking pipeline. Returns {"has_guitar": bool, "tab_data": dict|None}."""
     with _pipeline_lock:
@@ -325,8 +359,11 @@ def _run_pipeline_sync(
                 logger.info("No guitar energy detected — skipping transcription")
                 return {"has_guitar": False, "tab_data": None}
 
+            # Estimate BPM from full mix — drums make beat tracking far more reliable
+            bpm = _estimate_bpm(audio)
+
             on_step("transcribing")
-            note_events, bpm = _transcribe(guitar)
+            note_events = _transcribe(guitar)
             logger.info("Transcribed. BPM=%.1f, notes=%d", bpm, len(note_events))
 
             on_step("building")
@@ -358,6 +395,20 @@ def _run_pipeline_sync(
                 "lyrics_sections": lyrics_sections,
                 "guitars": guitars,
             }
+
+            # Persist guitar stem as MP3 so users can download it later
+            if tab_gen_id:
+                try:
+                    _AUDIO_STORE.mkdir(parents=True, exist_ok=True)
+                    out_mp3 = _AUDIO_STORE / f"{tab_gen_id}.mp3"
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", guitar, "-q:a", "2", str(out_mp3)],
+                        capture_output=True, timeout=120,
+                    )
+                    logger.info("Guitar stem saved: %s", out_mp3)
+                except Exception:
+                    logger.warning("Failed to save guitar stem MP3", exc_info=True)
+
             return {"has_guitar": True, "tab_data": tab_data}
 
         except Exception:
@@ -411,7 +462,7 @@ async def process_tab_job(
             pass  # non-critical; don't abort the pipeline over a step update
 
     try:
-        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms, on_step)
+        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms, on_step, tab_gen_id)
 
         async with Session() as session:
             job = await _get_job(session)

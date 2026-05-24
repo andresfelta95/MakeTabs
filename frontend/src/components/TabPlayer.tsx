@@ -2,13 +2,14 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import type { GuitarTab } from "../types";
 
 const OPEN_MIDI: Record<number, number> = { 1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64 };
-const BEATS_PER_MEASURE = 8;
+const BEATS_PER_MEASURE = 16;
 const SCHEDULE_AHEAD = 0.5;
 const TICK_MS = 150;
 
 interface Note {
   time: number;
   midi: number;
+  dur: number; // seconds
 }
 
 function buildTimeline(guitar: GuitarTab, bpm: number): { notes: Note[]; total: number } {
@@ -23,7 +24,11 @@ function buildTimeline(guitar: GuitarTab, bpm: number): { notes: Note[]; total: 
       for (const n of section.measures[mi].notes) {
         const open = OPEN_MIDI[n.string];
         if (open !== undefined) {
-          notes.push({ time: cursor + mi * measureDur + (n.beat ?? 0) * beatDur, midi: open + n.fret });
+          notes.push({
+            time: cursor + mi * measureDur + (n.beat ?? 0) * beatDur,
+            midi: open + n.fret,
+            dur: Math.max(0.08, (n.duration ?? 1) * beatDur * 0.9), // 90% of slot = slight gap between notes
+          });
         }
       }
     }
@@ -78,7 +83,7 @@ export default function TabPlayer({ guitar, bpm }: TabPlayerProps) {
     liveNodesRef.current = [];
   }
 
-  function playNote(ac: AudioContext, midi: number, when: number) {
+  function playNote(ac: AudioContext, midi: number, when: number, dur: number) {
     const freq = 440 * Math.pow(2, (midi - 69) / 12);
     const osc  = ac.createOscillator();
     const gain = ac.createGain();
@@ -88,10 +93,10 @@ export default function TabPlayer({ guitar, bpm }: TabPlayerProps) {
 
     osc.type = "sawtooth";
     osc.frequency.value = freq;
-    gain.gain.value = 0.4; // constant gain — avoids automation timing bugs on mobile
+    gain.gain.value = 0.4;
 
     osc.start(when);
-    osc.stop(when + 0.3);
+    osc.stop(when + dur);
 
     liveNodesRef.current.push(osc);
     osc.onended = () => {
@@ -105,11 +110,11 @@ function scheduleChunk(ac: AudioContext) {
     const horizonSong = (now + SCHEDULE_AHEAD) - songStartRef.current + offsetRef.current;
 
     while (noteIdxRef.current < notes.length) {
-      const { time, midi } = notes[noteIdxRef.current];
+      const { time, midi, dur } = notes[noteIdxRef.current];
       if (time > horizonSong) break;
       const when = songStartRef.current + (time - offsetRef.current);
       if (when > now - 0.01) {
-        playNote(ac, midi, Math.max(when, now + 0.005));
+        playNote(ac, midi, Math.max(when, now + 0.005), dur);
       }
       noteIdxRef.current++;
     }

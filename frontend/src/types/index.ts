@@ -44,6 +44,7 @@ export interface TabNote {
   string: number;
   fret: number;
   beat?: number;
+  duration?: number; // in beat slots (1 = eighth note, 2 = quarter, 4 = half, 8 = whole)
 }
 
 export interface TabMeasure {
@@ -94,3 +95,57 @@ export interface CachedTabInfo {
 }
 
 export type TabStatusMap = Record<string, CachedTabInfo>;
+
+// ── Chiptune types ────────────────────────────────────────────────────────────
+
+export interface ChiptuneNote {
+  pitch: number; // MIDI note number
+  beat: number;  // 0–15 (sixteenth-note slot within measure)
+  dur?: number;  // duration in beat slots (e.g. 2 = two slots)
+}
+
+export interface ChiptuneMeasure {
+  notes: ChiptuneNote[];
+}
+
+export interface ChiptuneSection {
+  name: string;
+  measures: ChiptuneMeasure[];
+}
+
+export interface DrumEvent {
+  measure: number;
+  beat: number;
+  type: "kick" | "snare" | "hihat";
+}
+
+export interface ChiptuneTonalTrack {
+  waveform: "square" | "triangle" | "pulse" | "sawtooth";
+  sections: ChiptuneSection[];
+}
+
+export interface ChiptuneDrumTrack {
+  waveform: "noise";
+  patterns: DrumEvent[];
+}
+
+export interface ChiptuneData {
+  bpm: number;
+  tracks: {
+    melody: ChiptuneTonalTrack;
+    harmony?: ChiptuneTonalTrack;
+    bass: ChiptuneTonalTrack;
+    drums: ChiptuneDrumTrack;
+  };
+}
+
+export interface ChiptuneJob {
+  job_id: string;
+  status: TabStatus;
+  current_step: string | null;
+  chiptune_data: ChiptuneData | null;
+  error: string | null;
+  track: Track | null;
+  created_at: string;
+  completed_at: string | null;
+}

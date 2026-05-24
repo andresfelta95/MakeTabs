@@ -5,6 +5,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import TabViewer from "./pages/TabViewer";
+import ChiptuneViewer from "./pages/ChiptuneViewer";
 import Callback from "./pages/Callback";
 
 const queryClient = new QueryClient({
@@ -53,6 +54,14 @@ export default function App() {
             element={
               <AuthGuard>
                 <TabViewer />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/chiptune/:jobId"
+            element={
+              <AuthGuard>
+                <ChiptuneViewer />
               </AuthGuard>
             }
           />

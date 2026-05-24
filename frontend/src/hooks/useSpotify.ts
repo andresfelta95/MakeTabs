@@ -7,6 +7,9 @@ import {
   getTabJob,
   getTabStatuses,
   getTabHistory,
+  generateChiptune,
+  getChiptuneJob,
+  getChiptuneHistory,
 } from "../api/spotify";
 
 export function usePlaylists(limit = 20, offset = 0) {
@@ -58,7 +61,7 @@ export function useTrackTabStatuses(spotifyIds: string[]) {
 export function useGenerateTabs() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: generateTabs,
+    mutationFn: (id: string) => generateTabs(id),
     onSuccess: (data) => {
       queryClient.setQueryData(["tab-job", data.job_id], data);
       queryClient.invalidateQueries({ queryKey: ["tab-statuses"] });
@@ -71,6 +74,44 @@ export function useTabHistory() {
   return useQuery({
     queryKey: ["tab-history"],
     queryFn: getTabHistory,
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? [];
+      const hasActive = jobs.some(j => j.status === "pending" || j.status === "processing");
+      return hasActive ? 3000 : false;
+    },
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useChiptuneJob(jobId: string | null) {
+  return useQuery({
+    queryKey: ["chiptune-job", jobId],
+    queryFn: () => getChiptuneJob(jobId!),
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "processing" ? 2000 : false;
+    },
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useGenerateChiptune() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => generateChiptune(id),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["chiptune-job", data.job_id], data);
+      queryClient.invalidateQueries({ queryKey: ["chiptune-history"] });
+    },
+  });
+}
+
+export function useChiptuneHistory() {
+  return useQuery({
+    queryKey: ["chiptune-history"],
+    queryFn: getChiptuneHistory,
     staleTime: 30_000,
     refetchInterval: (query) => {
       const jobs = query.state.data ?? [];
