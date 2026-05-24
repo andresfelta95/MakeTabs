@@ -25,9 +25,8 @@ function buildTonalTimeline(
   const quarterDur = 60 / Math.max(bpm, 20);
   const measureDur = 4 * quarterDur;
   const beatDur = measureDur / BEATS_PER_MEASURE;
-  const noteDur = beatDur * 1.8;
   const osc = track.waveform as OscillatorType;
-  const gainLevel = osc === "triangle" ? 0.35 : 0.25;
+  const gainLevel = osc === "triangle" ? 0.35 : osc === "sawtooth" ? 0.18 : 0.25;
 
   const notes: ScheduledNote[] = [];
   let cursor = 0;
@@ -39,7 +38,7 @@ function buildTonalTimeline(
           time: cursor + mi * measureDur + (n.beat ?? 0) * beatDur,
           midi: n.pitch,
           waveform: osc,
-          duration: noteDur,
+          duration: (n.dur ?? 1.8) * beatDur,
           gain: gainLevel,
         });
       }
@@ -167,6 +166,7 @@ function encodeWav(buffer: AudioBuffer): Blob {
 
 async function renderToWav(
   melody: ScheduledNote[],
+  harmony: ScheduledNote[],
   bass: ScheduledNote[],
   drums: ScheduledDrum[],
   total: number,
@@ -177,6 +177,9 @@ async function renderToWav(
 
   if (!muted.melody) {
     for (const note of melody) playTone(offlineAC as unknown as AudioContext, note, note.time);
+  }
+  if (!muted.harmony) {
+    for (const note of harmony) playTone(offlineAC as unknown as AudioContext, note, note.time);
   }
   if (!muted.bass) {
     for (const note of bass) playTone(offlineAC as unknown as AudioContext, note, note.time);
@@ -194,7 +197,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const [progress, setProgress]   = useState(0);
   const [exporting, setExporting] = useState(false);
   const [muted, setMuted]         = useState<Record<string, boolean>>({
-    melody: false, bass: false, drums: false,
+    melody: false, harmony: false, bass: false, drums: false,
   });
 
   const acRef        = useRef<AudioContext | null>(null);
@@ -203,16 +206,18 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const rafRef       = useRef(0);
   const timerRef     = useRef(0);
   const mIdxRef      = useRef(0); // melody index
+  const hIdxRef      = useRef(0); // harmony index
   const bIdxRef      = useRef(0); // bass index
   const dIdxRef      = useRef(0); // drums index
 
-  const { melody, bass, drums, total } = useMemo(() => {
+  const { melody, harmony, bass, drums, total } = useMemo(() => {
     const m = buildTonalTimeline(data.tracks.melody, data.bpm);
+    const h = data.tracks.harmony ? buildTonalTimeline(data.tracks.harmony, data.bpm) : [];
     const b = buildTonalTimeline(data.tracks.bass, data.bpm);
     const d = buildDrumTimeline(data.tracks.drums.patterns, data.bpm);
-    const all = [...m.map(n => n.time), ...b.map(n => n.time), ...d.map(n => n.time)];
+    const all = [...m.map(n => n.time), ...h.map(n => n.time), ...b.map(n => n.time), ...d.map(n => n.time)];
     const t = all.length > 0 ? Math.max(...all) + 2 : 30;
-    return { melody: m, bass: b, drums: d, total: t };
+    return { melody: m, harmony: h, bass: b, drums: d, total: t };
   }, [data]);
 
   useEffect(() => {
@@ -247,6 +252,17 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
       while (mIdxRef.current < melody.length && melody[mIdxRef.current].time <= songHorizon) mIdxRef.current++;
     }
 
+    if (!muted.harmony) {
+      while (hIdxRef.current < harmony.length && harmony[hIdxRef.current].time <= songHorizon) {
+        const note = harmony[hIdxRef.current];
+        const when = Math.max(songStartRef.current + (note.time - offsetRef.current), now + 0.005);
+        if (when < horizon + 0.1) playTone(ac, note, when);
+        hIdxRef.current++;
+      }
+    } else {
+      while (hIdxRef.current < harmony.length && harmony[hIdxRef.current].time <= songHorizon) hIdxRef.current++;
+    }
+
     if (!muted.bass) {
       while (bIdxRef.current < bass.length && bass[bIdxRef.current].time <= songHorizon) {
         const note = bass[bIdxRef.current];
@@ -270,6 +286,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     }
 
     const anyLeft = mIdxRef.current < melody.length
+      || hIdxRef.current < harmony.length
       || bIdxRef.current < bass.length
       || dIdxRef.current < drums.length;
 
@@ -313,6 +330,8 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     const offset = offsetRef.current;
     mIdxRef.current = melody.findIndex(n => n.time >= offset);
     if (mIdxRef.current === -1) mIdxRef.current = melody.length;
+    hIdxRef.current = harmony.findIndex(n => n.time >= offset);
+    if (hIdxRef.current === -1) hIdxRef.current = harmony.length;
     bIdxRef.current = bass.findIndex(n => n.time >= offset);
     if (bIdxRef.current === -1) bIdxRef.current = bass.length;
     dIdxRef.current = drums.findIndex(n => n.time >= offset);
@@ -347,7 +366,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   async function handleDownload() {
     setExporting(true);
     try {
-      const blob = await renderToWav(melody, bass, drums, total, muted);
+      const blob = await renderToWav(melody, harmony, bass, drums, total, muted);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -361,8 +380,13 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   }
 
   const elapsed = progress * total;
-  const trackKeys = ["melody", "bass", "drums"] as const;
-  const trackLabels = { melody: "Melody", bass: "Bass", drums: "Drums" };
+  const trackKeys = [
+    "melody",
+    ...(data.tracks.harmony ? ["harmony"] : []),
+    "bass",
+    "drums",
+  ];
+  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", bass: "Bass", drums: "Drums" };
 
   return (
     <div className="bg-card border border-theme rounded-xl p-4 space-y-3">

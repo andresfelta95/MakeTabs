@@ -31,9 +31,10 @@ export const searchTracks = async (
   return data;
 };
 
-export const generateTabs = async (spotifyTrackId: string): Promise<TabJob> => {
+export const generateTabs = async (spotifyTrackId: string, force = false): Promise<TabJob> => {
   const { data } = await client.post<TabJob>("/tabs/generate", {
     spotify_track_id: spotifyTrackId,
+    force,
   });
   return data;
 };
@@ -55,9 +56,10 @@ export const getTabHistory = async (): Promise<TabJob[]> => {
   return data;
 };
 
-export const generateChiptune = async (spotifyTrackId: string): Promise<ChiptuneJob> => {
+export const generateChiptune = async (spotifyTrackId: string, force = false): Promise<ChiptuneJob> => {
   const { data } = await client.post<ChiptuneJob>("/chiptune/generate", {
     spotify_track_id: spotifyTrackId,
+    force,
   });
   return data;
 };

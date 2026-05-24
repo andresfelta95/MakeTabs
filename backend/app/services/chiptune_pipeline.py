@@ -49,7 +49,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "1.6.0"
+CURRENT_ALGORITHM = "1.7.0"
 
 
 # ── Step 1: download (reuse from audio_pipeline) ──────────────────────────────
@@ -80,13 +80,13 @@ def _download_audio(work_dir: str, title: str, artist: str) -> str:
 # ── Step 2: Demucs 4-stem separation ─────────────────────────────────────────
 
 def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
-    """Run htdemucs_6s and return paths for drums, bass, guitar stems."""
+    """Run htdemucs_6s and return paths for drums, bass, guitar, piano stems."""
     out_dir = Path(work_dir) / "demucs_out"
     out_dir.mkdir()
 
     cmd = [
         "python", "-m", "demucs",
-        "-n", "htdemucs_6s",        # 6-stem: dedicated guitar stem separate from piano/keys
+        "-n", "htdemucs_6s",
         "-d", "cuda",
         "--overlap", "0.4",
         "--out", str(out_dir),
@@ -98,7 +98,7 @@ def _separate_stems(work_dir: str, audio_path: str) -> dict[str, str]:
 
     base = out_dir / "htdemucs_6s" / "audio"
     stems = {}
-    for name in ("drums", "bass", "guitar"):
+    for name in ("drums", "bass", "guitar", "piano"):
         p = base / f"{name}.wav"
         if not p.exists():
             raise FileNotFoundError(f"Demucs stem not found: {p}")
@@ -115,8 +115,9 @@ def _transcribe_tonal(
     duration_ms: int,
     min_freq: float,
     max_freq: float,
+    max_per_slot: int = 1,
 ) -> list[dict]:
-    """Run basic-pitch on a stem and return sections with {pitch, beat} notes."""
+    """Run basic-pitch on a stem and return sections with {pitch, beat, dur} notes."""
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
@@ -136,26 +137,36 @@ def _transcribe_tonal(
     total_s = duration_ms / 1000
     total_measures = max(1, int(total_s / measure_dur) + 1)
 
-    # (measure, beat) → (pitch, velocity) — loudest note per slot
-    best: dict[tuple[int, int], tuple[int, float]] = {}
+    # (measure, beat) → list of (pitch, velocity, dur_beats)
+    slots: dict[tuple[int, int], list[tuple[int, float, float]]] = {}
 
     for event in note_events:
         start_s = float(event[0])
-        pitch = int(event[2])
+        end_s   = float(event[1])
+        pitch   = int(event[2])
         velocity = float(event[3])
 
         if velocity < _MIN_VELOCITY / 127:
             continue
 
         m_idx = min(int(start_s / measure_dur), total_measures - 1)
-        beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
+        beat  = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
+        dur_beats = max(0.5, min(8.0, (end_s - start_s) / beat_dur))
+
         key = (m_idx, beat)
-        if key not in best or velocity > best[key][1]:
-            best[key] = (pitch, velocity)
+        if key not in slots:
+            slots[key] = []
+        slots[key].append((pitch, velocity, dur_beats))
 
     notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
-    for (m_idx, beat), (pitch, _) in best.items():
-        notes_by_measure[m_idx].append({"pitch": pitch, "beat": beat})
+    for (m_idx, beat), candidates in slots.items():
+        top = sorted(candidates, key=lambda x: x[1], reverse=True)[:max_per_slot]
+        for pitch, _, dur_beats in top:
+            notes_by_measure[m_idx].append({
+                "pitch": pitch,
+                "beat":  beat,
+                "dur":   round(dur_beats, 2),
+            })
 
     sections = []
     for i in range(0, total_measures, _MEASURES_PER_SECTION):
@@ -239,7 +250,7 @@ def _estimate_bpm(audio_path: str) -> float:
     bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
     if bpm < 20:
         bpm = 120.0
-    while bpm > 130:
+    while bpm > 160:
         bpm /= 2.0
     while bpm < 60:
         bpm *= 2.0
@@ -273,10 +284,17 @@ def _run_chiptune_sync(
             melody_sections = _transcribe_tonal(
                 stems["guitar"], bpm, duration_ms,
                 min_freq=150.0, max_freq=4000.0,
+                max_per_slot=1,
+            )
+            harmony_sections = _transcribe_tonal(
+                stems["piano"], bpm, duration_ms,
+                min_freq=80.0, max_freq=4000.0,
+                max_per_slot=3,
             )
             bass_sections = _transcribe_tonal(
                 stems["bass"], bpm, duration_ms,
                 min_freq=40.0, max_freq=400.0,
+                max_per_slot=1,
             )
 
             on_step("building")
@@ -285,15 +303,16 @@ def _run_chiptune_sync(
             chiptune_data = {
                 "bpm": round(bpm, 1),
                 "tracks": {
-                    "melody": {"waveform": "square",   "sections": melody_sections},
-                    "bass":   {"waveform": "triangle", "sections": bass_sections},
-                    "drums":  {"waveform": "noise",    "patterns": drum_patterns},
+                    "melody":  {"waveform": "square",   "sections": melody_sections},
+                    "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
+                    "bass":    {"waveform": "triangle", "sections": bass_sections},
+                    "drums":   {"waveform": "noise",    "patterns": drum_patterns},
                 },
             }
 
             logger.info(
-                "Chiptune built — melody sections=%d, bass sections=%d, drum events=%d",
-                len(melody_sections), len(bass_sections), len(drum_patterns),
+                "Chiptune built — melody=%d, harmony=%d, bass=%d sections, drums=%d events",
+                len(melody_sections), len(harmony_sections), len(bass_sections), len(drum_patterns),
             )
             return chiptune_data
 

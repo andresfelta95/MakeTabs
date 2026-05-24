@@ -61,7 +61,7 @@ export function useTrackTabStatuses(spotifyIds: string[]) {
 export function useGenerateTabs() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: generateTabs,
+    mutationFn: (id: string) => generateTabs(id),
     onSuccess: (data) => {
       queryClient.setQueryData(["tab-job", data.job_id], data);
       queryClient.invalidateQueries({ queryKey: ["tab-statuses"] });
@@ -100,7 +100,7 @@ export function useChiptuneJob(jobId: string | null) {
 export function useGenerateChiptune() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: generateChiptune,
+    mutationFn: (id: string) => generateChiptune(id),
     onSuccess: (data) => {
       queryClient.setQueryData(["chiptune-job", data.job_id], data);
       queryClient.invalidateQueries({ queryKey: ["chiptune-history"] });

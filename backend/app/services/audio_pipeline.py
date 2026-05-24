@@ -330,11 +330,15 @@ def _assign_lyrics(sections: list[dict], lyrics_sections: list[dict]) -> list[di
 
 # ── Synchronous pipeline (runs in thread) ────────────────────────────────────
 
+_AUDIO_STORE = Path("/app/audio")
+
+
 def _run_pipeline_sync(
     title: str,
     artist: str,
     duration_ms: int,
     on_step,  # callable(step: str) -> None
+    tab_gen_id: str | None = None,
 ) -> dict:
     """Full blocking pipeline. Returns {"has_guitar": bool, "tab_data": dict|None}."""
     with _pipeline_lock:
@@ -391,6 +395,20 @@ def _run_pipeline_sync(
                 "lyrics_sections": lyrics_sections,
                 "guitars": guitars,
             }
+
+            # Persist guitar stem as MP3 so users can download it later
+            if tab_gen_id:
+                try:
+                    _AUDIO_STORE.mkdir(parents=True, exist_ok=True)
+                    out_mp3 = _AUDIO_STORE / f"{tab_gen_id}.mp3"
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", guitar, "-q:a", "2", str(out_mp3)],
+                        capture_output=True, timeout=120,
+                    )
+                    logger.info("Guitar stem saved: %s", out_mp3)
+                except Exception:
+                    logger.warning("Failed to save guitar stem MP3", exc_info=True)
+
             return {"has_guitar": True, "tab_data": tab_data}
 
         except Exception:
@@ -444,7 +462,7 @@ async def process_tab_job(
             pass  # non-critical; don't abort the pipeline over a step update
 
     try:
-        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms, on_step)
+        result = await asyncio.to_thread(_run_pipeline_sync, title, artist, duration_ms, on_step, tab_gen_id)
 
         async with Session() as session:
             job = await _get_job(session)

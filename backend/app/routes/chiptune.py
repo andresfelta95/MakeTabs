@@ -78,6 +78,7 @@ async def generate_chiptune(
     needs_reprocess = (
         job is None
         or job.status == "failed"
+        or body.force
         or (job.status == "done" and job.algorithm_version != CURRENT_ALGORITHM)
     )
 

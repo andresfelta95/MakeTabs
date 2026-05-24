@@ -3,12 +3,16 @@ Tab generation routes.
 
 POST /tabs/generate          — request tab generation for a Spotify track
 GET  /tabs/{job_id}          — poll job status
+GET  /tabs/{job_id}/audio    — download audio for a tab job as MP3
 GET  /tabs/track/{spotify_id} — get cached tab by Spotify track ID
 """
 
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +63,7 @@ async def generate_tabs(
     needs_reprocess = (
         tab_gen is None
         or tab_gen.status == "failed"
+        or body.force
         or (tab_gen.status == "done" and tab_gen.algorithm_version != CURRENT_ALGORITHM)
     )
     if needs_reprocess:
@@ -160,6 +165,33 @@ async def get_tab_statuses(
         if row.spotify_id not in statuses:
             statuses[row.spotify_id] = {"status": row.status, "job_id": str(row.id)}
     return statuses
+
+
+@router.get("/{job_id}/audio")
+async def download_tab_audio(
+    job_id: str,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serve the isolated guitar stem MP3 that was saved during tab generation."""
+    result = await db.execute(select(TabGeneration).where(TabGeneration.id == job_id))
+    tab_gen = result.scalar_one_or_none()
+    if not tab_gen:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    mp3_path = Path("/app/audio") / f"{job_id}.mp3"
+    if not mp3_path.exists():
+        raise HTTPException(status_code=404, detail="Audio not available — regenerate the tab to create it")
+
+    result = await db.execute(select(Track).where(Track.id == tab_gen.track_id))
+    track = result.scalar_one_or_none()
+    safe = re.sub(r"[^a-z0-9_\- ]", "_", f"{track.title} - {track.artist}" if track else job_id, flags=re.IGNORECASE)
+
+    return FileResponse(
+        str(mp3_path),
+        media_type="audio/mpeg",
+        filename=f"{safe}_guitar.mp3",
+    )
 
 
 @router.get("/{job_id}", response_model=TabJobOut)

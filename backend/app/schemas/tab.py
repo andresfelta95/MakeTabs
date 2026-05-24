@@ -6,6 +6,7 @@ from app.schemas.track import TrackOut
 
 class GenerateTabRequest(BaseModel):
     spotify_track_id: str
+    force: bool = False
 
 
 class TabJobOut(BaseModel):

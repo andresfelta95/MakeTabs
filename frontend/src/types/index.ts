@@ -100,7 +100,8 @@ export type TabStatusMap = Record<string, CachedTabInfo>;
 
 export interface ChiptuneNote {
   pitch: number; // MIDI note number
-  beat: number;  // 0–7 (eighth-note slot)
+  beat: number;  // 0–15 (sixteenth-note slot within measure)
+  dur?: number;  // duration in beat slots (e.g. 2 = two slots)
 }
 
 export interface ChiptuneMeasure {
@@ -132,6 +133,7 @@ export interface ChiptuneData {
   bpm: number;
   tracks: {
     melody: ChiptuneTonalTrack;
+    harmony?: ChiptuneTonalTrack;
     bass: ChiptuneTonalTrack;
     drums: ChiptuneDrumTrack;
   };
