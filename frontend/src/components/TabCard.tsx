@@ -11,7 +11,7 @@ export default function TabCard({ job }: TabCardProps) {
 
   const handleClick = () => {
     if (job.status === "done") {
-      navigate(`/tabs/${job.job_id}`);
+      navigate(`/tab/${job.job_id}`);
     }
   };
 

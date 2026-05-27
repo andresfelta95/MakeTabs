@@ -15,6 +15,7 @@ class TabJobOut(BaseModel):
     current_step: str | None  # downloading | separating | detecting | transcribing | building
     has_guitar: bool | None
     tab_data: dict | None
+    source: str | None  # "songsterr" | "ml"
     error: str | None
     track: TrackOut | None
     created_at: datetime

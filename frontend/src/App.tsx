@@ -50,7 +50,7 @@ export default function App() {
             }
           />
           <Route
-            path="/tabs/:jobId"
+            path="/tab/:jobId"
             element={
               <AuthGuard>
                 <TabViewer />

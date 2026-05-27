@@ -1,12 +1,12 @@
 """
 Audio processing pipeline: Spotify track → guitar tab JSON.
 
-Pipeline steps (run in a thread pool — CPU/IO-heavy):
-  1. yt-dlp      — download audio from YouTube by "artist - title" query
-  2. Demucs      — source-separate to isolate guitar/keys stem ("other")
-  3. Energy check — decide whether the track actually has guitar
-  4. basic-pitch  — transcribe guitar stem to MIDI-like note events
-  5. Converter    — map MIDI pitches to string/fret positions and build tab JSON
+Two paths, tried in order:
+  A. Songsterr — pull the official tab JSON from Songsterr's public API + CDN,
+                 convert to display format, synth its MIDI to MP3.  Fast (~3s)
+                 and the notes are human-transcribed, not ML-guessed.
+  B. ML fallback — when Songsterr has no match, fall through to the original
+                   yt-dlp → Demucs → basic-pitch pipeline below.
 
 The coroutine `process_tab_job` is the public entry point; it is meant to be
 dispatched via FastAPI BackgroundTasks.  It creates its own DB session so it
@@ -29,6 +29,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.models.tab import TabGeneration
 from app.models.track import Track
+from app.services.songsterr_client import SongsterrClient, SongsterrNotFound
+from app.services.songsterr_to_tab import build_midi_bytes, build_tab_data
+from app.services.tab_audio_renderer import render_midi_to_wav
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +336,110 @@ def _assign_lyrics(sections: list[dict], lyrics_sections: list[dict]) -> list[di
 _AUDIO_STORE = Path("/app/audio")
 
 
+def _try_songsterr(
+    title: str,
+    artist: str,
+    tab_gen_id: str | None,
+    on_step,
+) -> dict | None:
+    """Look the song up on Songsterr and build tab_data + MP3 from its official
+    JSON. Returns None when Songsterr has no usable match — caller should fall
+    back to the ML pipeline."""
+    try:
+        with SongsterrClient() as client:
+            on_step("searching_songsterr")
+            results = client.search(artist, title)
+            best = client.pick_best_match(results, artist, title)
+            if not best:
+                logger.info("Songsterr: no match for %s — %s", artist, title)
+                return None
+
+            song_id = int(best["songId"])
+            logger.info("Songsterr match: songId=%s (%s — %s)", song_id, best.get("artist"), best.get("title"))
+
+            on_step("fetching_songsterr_meta")
+            state = client.get_state_meta(song_id)
+
+            # Pick guitar tracks; if none, this song isn't useful to us.
+            guitar_tracks_meta = [t for t in state.tracks if t.is_guitar and not t.is_empty]
+            if not guitar_tracks_meta:
+                logger.info("Songsterr songId=%s has no guitar tracks", song_id)
+                return None
+
+            on_step("fetching_songsterr_tabs")
+            all_tracks: list[tuple] = []  # for MIDI (all non-vocal)
+            guitar_pairs: list[tuple] = []  # for tab_data display (guitar only)
+            for t in state.tracks:
+                if t.is_vocal or t.is_empty:
+                    continue
+                try:
+                    data = client.get_track_data(song_id, state.revision_id, state.image, t.part_id)
+                except (SongsterrNotFound, httpx_exc()) as e:
+                    logger.warning("Songsterr part %s fetch failed: %s", t.part_id, e)
+                    continue
+                all_tracks.append((t, data))
+                if t.is_guitar:
+                    guitar_pairs.append((t, data))
+
+            if not guitar_pairs:
+                return None
+
+            # BPM from the first guitar track's tempo automation.
+            bpm = 120.0
+            tempo = (guitar_pairs[0][1].get("automations") or {}).get("tempo") or []
+            if tempo:
+                bpm = float(tempo[0].get("bpm", 120))
+
+            lyrics_sections: list[dict] = []
+            if settings.genius_access_token:
+                try:
+                    from app.services.lyrics_service import fetch_lyrics_sections
+                    lyrics_sections = fetch_lyrics_sections(title, artist, settings.genius_access_token)
+                except Exception:
+                    logger.warning("Lyrics fetch failed", exc_info=True)
+
+            # Non-guitar accompaniment (bass/piano/drums/…) gets pre-computed as
+            # absolute-time notes for the frontend oscillator player.
+            accompaniment_pairs = [
+                (t, d) for (t, d) in all_tracks if not t.is_guitar
+            ]
+            tab_data = build_tab_data(
+                state, guitar_pairs, bpm, lyrics_sections,
+                accompaniment_tracks=accompaniment_pairs,
+            )
+
+            # Synthesize all non-vocal tracks so the WAV sounds like the song,
+            # not just one isolated guitar.
+            if tab_gen_id:
+                on_step("synthesizing_audio")
+                try:
+                    midi_bytes = build_midi_bytes(state, all_tracks)
+                    _AUDIO_STORE.mkdir(parents=True, exist_ok=True)
+                    out_wav = _AUDIO_STORE / f"{tab_gen_id}.wav"
+                    if render_midi_to_wav(midi_bytes, out_wav):
+                        logger.info("Songsterr WAV saved: %s", out_wav)
+                    else:
+                        logger.warning("Songsterr WAV render failed — tab still saved")
+                except Exception:
+                    logger.warning("MIDI synth failed", exc_info=True)
+
+            return {"has_guitar": True, "tab_data": tab_data, "source": "songsterr"}
+
+    except SongsterrNotFound as e:
+        logger.info("Songsterr lookup failed: %s", e)
+        return None
+    except Exception:
+        logger.warning("Songsterr path crashed; falling back to ML", exc_info=True)
+        return None
+
+
+def httpx_exc():
+    """Return httpx's RequestError class. Imported lazily so the worker thread
+    doesn't pay for httpx at module-load time."""
+    import httpx
+    return httpx.RequestError
+
+
 def _run_pipeline_sync(
     title: str,
     artist: str,
@@ -340,11 +447,17 @@ def _run_pipeline_sync(
     on_step,  # callable(step: str) -> None
     tab_gen_id: str | None = None,
 ) -> dict:
-    """Full blocking pipeline. Returns {"has_guitar": bool, "tab_data": dict|None}."""
+    """Full blocking pipeline. Returns {"has_guitar": bool, "tab_data": dict|None, "source": str}."""
+
+    # Try Songsterr first — fast, and the tabs are accurate.
+    songsterr_result = _try_songsterr(title, artist, tab_gen_id, on_step)
+    if songsterr_result is not None:
+        return songsterr_result
+
     with _pipeline_lock:
         work_dir = tempfile.mkdtemp(prefix="maketabs_")
         try:
-            logger.info("Pipeline start: %s — %s", artist, title)
+            logger.info("ML pipeline start: %s — %s", artist, title)
 
             on_step("downloading")
             audio = _download_audio(work_dir, title, artist)
@@ -357,7 +470,7 @@ def _run_pipeline_sync(
             on_step("detecting")
             if not _has_guitar_energy(guitar):
                 logger.info("No guitar energy detected — skipping transcription")
-                return {"has_guitar": False, "tab_data": None}
+                return {"has_guitar": False, "tab_data": None, "source": "ml"}
 
             # Estimate BPM from full mix — drums make beat tracking far more reliable
             bpm = _estimate_bpm(audio)
@@ -394,22 +507,21 @@ def _run_pipeline_sync(
                 "bpm": round(bpm, 1),
                 "lyrics_sections": lyrics_sections,
                 "guitars": guitars,
+                "source": "ml",
             }
 
-            # Persist guitar stem as MP3 so users can download it later
+            # Persist guitar stem as WAV so users can download it later.
+            # Demucs already produced a WAV — just copy it into the audio store.
             if tab_gen_id:
                 try:
                     _AUDIO_STORE.mkdir(parents=True, exist_ok=True)
-                    out_mp3 = _AUDIO_STORE / f"{tab_gen_id}.mp3"
-                    subprocess.run(
-                        ["ffmpeg", "-y", "-i", guitar, "-q:a", "2", str(out_mp3)],
-                        capture_output=True, timeout=120,
-                    )
-                    logger.info("Guitar stem saved: %s", out_mp3)
+                    out_wav = _AUDIO_STORE / f"{tab_gen_id}.wav"
+                    shutil.copyfile(guitar, out_wav)
+                    logger.info("Guitar stem saved: %s", out_wav)
                 except Exception:
-                    logger.warning("Failed to save guitar stem MP3", exc_info=True)
+                    logger.warning("Failed to save guitar stem WAV", exc_info=True)
 
-            return {"has_guitar": True, "tab_data": tab_data}
+            return {"has_guitar": True, "tab_data": tab_data, "source": "ml"}
 
         except Exception:
             logger.exception("Pipeline failed for %s — %s", artist, title)
@@ -472,6 +584,7 @@ async def process_tab_job(
             job.status = "done"
             job.completed_at = datetime.now(timezone.utc)
             job.tab_data = result["tab_data"]
+            job.source = result.get("source", "ml")
 
             track_r = await session.execute(
                 select(Track).where(Track.id == job.track_id)

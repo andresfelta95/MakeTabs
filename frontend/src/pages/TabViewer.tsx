@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import PipelineStatus from "../components/PipelineStatus";
 import TabPlayer from "../components/TabPlayer";
+import BackendAudioPlayer from "../components/BackendAudioPlayer";
 import { useTabJob } from "../hooks/useSpotify";
 import { generateTabs } from "../api/spotify";
 import type { GuitarTab, LyricsSection, TabData, TabSection } from "../types";
@@ -12,37 +13,13 @@ export default function TabViewer() {
   const navigate = useNavigate();
   const { data: job, isLoading } = useTabJob(jobId ?? null);
   const [regenerating, setRegenerating] = useState(false);
-  const [downloadingAudio, setDownloadingAudio] = useState(false);
-
-  async function handleAudioDownload() {
-    if (!jobId || downloadingAudio) return;
-    setDownloadingAudio(true);
-    try {
-      const res = await fetch(`/tabs/${jobId}/audio`, { credentials: "include" });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const blob = await res.blob();
-      const disposition = res.headers.get("content-disposition") ?? "";
-      const nameMatch = disposition.match(/filename="?([^"]+)"?/);
-      const filename = nameMatch ? nameMatch[1] : "audio.mp3";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("Audio download failed", e);
-    } finally {
-      setDownloadingAudio(false);
-    }
-  }
 
   async function handleRegenerate() {
     if (!job?.track?.spotify_id || regenerating) return;
     setRegenerating(true);
     try {
       const newJob = await generateTabs(job.track.spotify_id, true);
-      navigate(`/tabs/${newJob.job_id}`, { replace: true });
+      navigate(`/tab/${newJob.job_id}`, { replace: true });
     } finally {
       setRegenerating(false);
     }
@@ -104,7 +81,6 @@ export default function TabViewer() {
             </div>
             <div className="flex items-center gap-2">
               <DownloadButton tab={job.tab_data} title={job.track?.title} artist={job.track?.artist} />
-              <AudioDownloadButton loading={downloadingAudio} onClick={handleAudioDownload} />
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
@@ -128,7 +104,7 @@ export default function TabViewer() {
               </button>
             </div>
           </div>
-          <TabDisplay tab={job.tab_data} />
+          <TabDisplay tab={job.tab_data} songTitle={job.track?.title} jobId={jobId!} />
         </div>
       )}
     </Layout>
@@ -192,32 +168,7 @@ function DownloadButton({ tab, title, artist }: DownloadButtonProps) {
   );
 }
 
-function AudioDownloadButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      title="Download isolated guitar stem as MP3"
-      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold
-                 border border-green-400/40 text-green-400 hover:bg-green-400/10
-                 disabled:opacity-50 disabled:cursor-wait transition-colors"
-    >
-      {loading ? (
-        <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" strokeOpacity="0.3"/>
-          <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
-        </svg>
-      ) : (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3v13M5 16l7 7 7-7"/><line x1="3" y1="23" x2="21" y2="23"/>
-        </svg>
-      )}
-      {loading ? "Fetching…" : "MP3"}
-    </button>
-  );
-}
-
-function TabDisplay({ tab }: { tab: TabData }) {
+function TabDisplay({ tab, songTitle, jobId }: { tab: TabData; songTitle?: string; jobId: string }) {
   const [activeGuitar, setActiveGuitar] = useState(0);
 
   // v2 schema: multiple guitars + lyrics
@@ -242,7 +193,8 @@ function TabDisplay({ tab }: { tab: TabData }) {
             ))}
           </div>
         )}
-        <TabPlayer guitar={guitar} bpm={tab.bpm} />
+        <TabPlayer tab={tab} songTitle={songTitle} />
+        <BackendAudioPlayer jobId={jobId} />
         <AsciiTab
           guitar={guitar}
           lyricsSections={tab.lyrics_sections ?? []}
@@ -258,7 +210,8 @@ function TabDisplay({ tab }: { tab: TabData }) {
     const guitar = { name: "Guitar", sections: tab.sections };
     return (
       <div className="space-y-4">
-        <TabPlayer guitar={guitar} bpm={tab.bpm} />
+        <TabPlayer tab={tab} songTitle={songTitle} />
+        <BackendAudioPlayer jobId={jobId} />
         <AsciiTab
           guitar={guitar}
           lyricsSections={[]}

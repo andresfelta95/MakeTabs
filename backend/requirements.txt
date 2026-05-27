@@ -30,3 +30,6 @@ numpy==1.26.4
 
 # Lyrics
 lyricsgenius==3.0.1
+
+# MIDI synthesis (Songsterr path)
+mido==1.3.3
