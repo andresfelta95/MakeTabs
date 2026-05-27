@@ -196,8 +196,10 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const [status, setStatus]       = useState<State>("idle");
   const [progress, setProgress]   = useState(0);
   const [exporting, setExporting] = useState(false);
+  // Drums permanently muted — kept in the data model for compatibility with old
+  // chiptune jobs, but the noise-style hits don't add anything musical to the mix.
   const [muted, setMuted]         = useState<Record<string, boolean>>({
-    melody: false, harmony: false, bass: false, drums: false,
+    melody: false, harmony: false, bass: false, drums: true,
   });
 
   const acRef        = useRef<AudioContext | null>(null);
@@ -384,9 +386,8 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     "melody",
     ...(data.tracks.harmony ? ["harmony"] : []),
     "bass",
-    "drums",
   ];
-  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", bass: "Bass", drums: "Drums" };
+  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", bass: "Bass" };
 
   return (
     <div className="bg-card border border-theme rounded-xl p-4 space-y-3">

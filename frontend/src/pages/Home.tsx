@@ -38,7 +38,7 @@ export default function Home() {
     setLoadingTrackId(spotifyId);
     try {
       const job = await generateTabs.mutateAsync(spotifyId);
-      navigate(`/tabs/${job.job_id}`);
+      navigate(`/tab/${job.job_id}`);
     } finally {
       setLoadingTrackId(null);
     }

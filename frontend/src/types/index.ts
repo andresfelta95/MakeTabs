@@ -67,6 +67,18 @@ export interface GuitarTab {
   sections: TabSection[];
 }
 
+export interface AccompanimentNote {
+  t: number; // absolute time, seconds
+  p: number; // MIDI pitch (or GM percussion note for drums)
+  d: number; // duration, seconds
+}
+
+export interface AccompanimentTrack {
+  kind: "bass" | "piano" | "drums" | "other";
+  name: string;
+  notes: AccompanimentNote[];
+}
+
 export interface TabData {
   tuning: string[];
   bpm: number;
@@ -75,6 +87,9 @@ export interface TabData {
   // v2 schema
   guitars?: GuitarTab[];
   lyrics_sections?: LyricsSection[];
+  // v4.4: pre-computed bass/piano/drums for the oscillator player. Not shown
+  // visually — purely additional sound layered into the synth playback.
+  accompaniment?: AccompanimentTrack[];
 }
 
 export interface TabJob {

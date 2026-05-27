@@ -22,7 +22,11 @@ class TabGeneration(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
 
     # downloading | separating | detecting | transcribing | building
+    # searching_songsterr | fetching_songsterr_meta | fetching_songsterr_tabs | synthesizing_audio
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Where the tab came from: "songsterr" (official) or "ml" (basic-pitch transcription)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="ml")
 
     # Structured tab output — see docs/architecture.md for JSON format
     tab_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -59,7 +59,7 @@ async def generate_tabs(
     )
     tab_gen = result.scalar_one_or_none()
 
-    CURRENT_ALGORITHM = "3.4.0"
+    CURRENT_ALGORITHM = "4.4.1"  # 4.4.1: drop drums from accompaniment (noise burst not musical enough)
     needs_reprocess = (
         tab_gen is None
         or tab_gen.status == "failed"
@@ -173,14 +173,20 @@ async def download_tab_audio(
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Serve the isolated guitar stem MP3 that was saved during tab generation."""
+    """Serve the WAV that was rendered during tab generation."""
     result = await db.execute(select(TabGeneration).where(TabGeneration.id == job_id))
     tab_gen = result.scalar_one_or_none()
     if not tab_gen:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    mp3_path = Path("/app/audio") / f"{job_id}.mp3"
-    if not mp3_path.exists():
+    audio_dir = Path("/app/audio")
+    wav_path = audio_dir / f"{job_id}.wav"
+    legacy_mp3 = audio_dir / f"{job_id}.mp3"  # tabs generated before the WAV switch
+    if wav_path.exists():
+        path, mime, ext = wav_path, "audio/wav", "wav"
+    elif legacy_mp3.exists():
+        path, mime, ext = legacy_mp3, "audio/mpeg", "mp3"
+    else:
         raise HTTPException(status_code=404, detail="Audio not available — regenerate the tab to create it")
 
     result = await db.execute(select(Track).where(Track.id == tab_gen.track_id))
@@ -188,9 +194,9 @@ async def download_tab_audio(
     safe = re.sub(r"[^a-z0-9_\- ]", "_", f"{track.title} - {track.artist}" if track else job_id, flags=re.IGNORECASE)
 
     return FileResponse(
-        str(mp3_path),
-        media_type="audio/mpeg",
-        filename=f"{safe}_guitar.mp3",
+        str(path),
+        media_type=mime,
+        filename=f"{safe}_guitar.{ext}",
     )
 
 
@@ -228,6 +234,7 @@ def _tab_job_out(tab_gen: TabGeneration, track: Track) -> dict:
         current_step=tab_gen.current_step,
         has_guitar=track.has_guitar,
         tab_data=tab_gen.tab_data,
+        source=tab_gen.source,
         error=tab_gen.error_message,
         track=track_out,
         created_at=tab_gen.created_at,
