@@ -59,7 +59,7 @@ async def generate_tabs(
     )
     tab_gen = result.scalar_one_or_none()
 
-    CURRENT_ALGORITHM = "4.4.1"  # 4.4.1: drop drums from accompaniment (noise burst not musical enough)
+    CURRENT_ALGORITHM = "5.1.1"  # 5.1.1: 0-indexed Songsterr strings + capo honored in pitch
     needs_reprocess = (
         tab_gen is None
         or tab_gen.status == "failed"

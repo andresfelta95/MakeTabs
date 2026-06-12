@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,10 @@ from app.database import engine
 from app.models.chiptune import ChiptuneGeneration
 from app.models.tab import TabGeneration
 from app.routes import auth, chiptune, spotify, tabs
+
+# uvicorn only configures its own loggers; without this the pipeline
+# logger.info lines never reach docker logs.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 
 
 @asynccontextmanager

@@ -35,3 +35,6 @@ backend/certs/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Accuracy-harness cache (Songsterr JSON + downloaded audio, ~300MB)
+backend/.diag_cache/

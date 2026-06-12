@@ -26,7 +26,7 @@ function buildTonalTimeline(
   const measureDur = 4 * quarterDur;
   const beatDur = measureDur / BEATS_PER_MEASURE;
   const osc = track.waveform as OscillatorType;
-  const gainLevel = osc === "triangle" ? 0.35 : osc === "sawtooth" ? 0.18 : 0.25;
+  const gainLevel = osc === "triangle" ? 0.32 : osc === "sawtooth" ? 0.12 : 0.22;
 
   const notes: ScheduledNote[] = [];
   let cursor = 0;
@@ -67,21 +67,58 @@ function midiToHz(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-function playTone(ac: AudioContext, note: ScheduledNote, when: number) {
+/**
+ * Master bus: per-note oscillators → master gain → compressor → speakers.
+ * Without this every oscillator sums straight into the destination and busy
+ * passages (melody + harmony chord + bass) clip into harsh distortion.
+ */
+function buildOutputChain(ac: AudioContext): AudioNode {
+  const master = ac.createGain();
+  master.gain.value = 0.9;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -16;
+  comp.knee.value = 12;
+  comp.ratio.value = 6;
+  comp.attack.value = 0.003;
+  comp.release.value = 0.2;
+  master.connect(comp);
+  comp.connect(ac.destination);
+  return master;
+}
+
+function playTone(ac: AudioContext, out: AudioNode, note: ScheduledNote, when: number) {
   const osc  = ac.createOscillator();
   const gain = ac.createGain();
   osc.connect(gain);
-  gain.connect(ac.destination);
+  gain.connect(out);
   osc.type = note.waveform;
   osc.frequency.value = midiToHz(note.midi);
-  gain.gain.value = note.gain;
+
+  // Attack/decay/release envelope — hard on/off edges click on every note,
+  // and hundreds of clicks per minute read as "noise". The sustain phase
+  // decays toward silence (like real chip hardware) so long held notes
+  // breathe instead of droning as flat multi-second tones.
+  const dur     = Math.max(note.duration, 0.05);
+  const attack  = Math.min(0.01, dur * 0.25);
+  const release = Math.min(0.09, dur * 0.5);
+  const relStart = when + dur - release;
+  const decayEnd = Math.min(when + attack + 0.05, relStart);
+  const g = gain.gain;
+  g.setValueAtTime(0, when);
+  g.linearRampToValueAtTime(note.gain, when + attack);
+  g.linearRampToValueAtTime(note.gain * 0.7, decayEnd);
+  if (relStart > decayEnd + 0.01) {
+    g.exponentialRampToValueAtTime(Math.max(note.gain * 0.22, 0.0008), relStart);
+  }
+  g.linearRampToValueAtTime(0, when + dur);
+
   osc.start(when);
-  osc.stop(when + note.duration);
+  osc.stop(when + dur + 0.02);
 }
 
-function playDrum(ac: AudioContext, type: "kick" | "snare" | "hihat", when: number) {
+function playDrum(ac: AudioContext, out: AudioNode, type: "kick" | "snare" | "hihat", when: number) {
   const gain = ac.createGain();
-  gain.connect(ac.destination);
+  gain.connect(out);
 
   if (type === "kick") {
     const osc = ac.createOscillator();
@@ -174,18 +211,20 @@ async function renderToWav(
 ): Promise<Blob> {
   const sampleRate = 22050;
   const offlineAC = new OfflineAudioContext(1, Math.ceil(total * sampleRate), sampleRate);
+  const ac = offlineAC as unknown as AudioContext;
+  const out = buildOutputChain(ac);
 
   if (!muted.melody) {
-    for (const note of melody) playTone(offlineAC as unknown as AudioContext, note, note.time);
+    for (const note of melody) playTone(ac, out, note, note.time);
   }
   if (!muted.harmony) {
-    for (const note of harmony) playTone(offlineAC as unknown as AudioContext, note, note.time);
+    for (const note of harmony) playTone(ac, out, note, note.time);
   }
   if (!muted.bass) {
-    for (const note of bass) playTone(offlineAC as unknown as AudioContext, note, note.time);
+    for (const note of bass) playTone(ac, out, note, note.time);
   }
   if (!muted.drums) {
-    for (const drum of drums) playDrum(offlineAC as unknown as AudioContext, drum.type, drum.time);
+    for (const drum of drums) playDrum(ac, out, drum.type, drum.time);
   }
 
   const rendered = await offlineAC.startRendering();
@@ -203,6 +242,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   });
 
   const acRef        = useRef<AudioContext | null>(null);
+  const outRef       = useRef<AudioNode | null>(null);
   const songStartRef = useRef(0);
   const offsetRef    = useRef(0);
   const rafRef       = useRef(0);
@@ -235,9 +275,11 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     clearTimeout(timerRef.current);
     acRef.current?.close();
     acRef.current = null;
+    outRef.current = null;
   }
 
   function scheduleChunk(ac: AudioContext) {
+    const out = outRef.current ?? buildOutputChain(ac);
     const now = ac.currentTime;
     const horizon = now + SCHEDULE_AHEAD;
     const songNow = now - songStartRef.current + offsetRef.current;
@@ -247,7 +289,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
       while (mIdxRef.current < melody.length && melody[mIdxRef.current].time <= songHorizon) {
         const note = melody[mIdxRef.current];
         const when = Math.max(songStartRef.current + (note.time - offsetRef.current), now + 0.005);
-        if (when < horizon + 0.1) playTone(ac, note, when);
+        if (when < horizon + 0.1) playTone(ac, out, note, when);
         mIdxRef.current++;
       }
     } else {
@@ -258,7 +300,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
       while (hIdxRef.current < harmony.length && harmony[hIdxRef.current].time <= songHorizon) {
         const note = harmony[hIdxRef.current];
         const when = Math.max(songStartRef.current + (note.time - offsetRef.current), now + 0.005);
-        if (when < horizon + 0.1) playTone(ac, note, when);
+        if (when < horizon + 0.1) playTone(ac, out, note, when);
         hIdxRef.current++;
       }
     } else {
@@ -269,7 +311,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
       while (bIdxRef.current < bass.length && bass[bIdxRef.current].time <= songHorizon) {
         const note = bass[bIdxRef.current];
         const when = Math.max(songStartRef.current + (note.time - offsetRef.current), now + 0.005);
-        if (when < horizon + 0.1) playTone(ac, note, when);
+        if (when < horizon + 0.1) playTone(ac, out, note, when);
         bIdxRef.current++;
       }
     } else {
@@ -280,7 +322,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
       while (dIdxRef.current < drums.length && drums[dIdxRef.current].time <= songHorizon) {
         const drum = drums[dIdxRef.current];
         const when = Math.max(songStartRef.current + (drum.time - offsetRef.current), now + 0.005);
-        if (when < horizon + 0.1) playDrum(ac, drum.type, when);
+        if (when < horizon + 0.1) playDrum(ac, out, drum.type, when);
         dIdxRef.current++;
       }
     } else {
@@ -324,6 +366,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     const ac: AudioContext = new AC();
     ac.resume();
     acRef.current = ac;
+    outRef.current = buildOutputChain(ac);
 
     const now = ac.currentTime + 0.05;
     songStartRef.current = now;

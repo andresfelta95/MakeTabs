@@ -70,6 +70,66 @@ def _midi_to_guitar(pitch: int) -> tuple[int, int] | None:
     return best
 
 
+def _candidates(pitch: int) -> list[tuple[int, int]]:
+    """All playable (string, fret) positions for a MIDI pitch."""
+    out = []
+    for string_num, open_pitch in _OPEN_MIDI.items():
+        fret = pitch - open_pitch
+        if 0 <= fret <= _MAX_FRET:
+            out.append((string_num, fret))
+    return out
+
+
+def _assign_positions(pitches: list[int]) -> list[tuple[int, int]]:
+    """Choose a (string, fret) per note minimizing fret-hand movement (Viterbi).
+
+    The old greedy mapping picked the lowest fret per note in isolation, which
+    makes consecutive notes jump all over the neck. Here the cost of a position
+    is a small preference for low frets plus the distance the fretting hand has
+    to travel from the previous note; open strings are free (the hand doesn't
+    move to play them).
+
+    Every pitch must be in guitar range (caller filters with _candidates).
+    """
+    n = len(pitches)
+    if n == 0:
+        return []
+
+    cand: list[list[tuple[int, int]]] = [_candidates(p) for p in pitches]
+
+    # cost[i][j]: best cumulative cost ending at candidate j of note i
+    # hand[i][j]: fretting-hand position in that best path (None = no fretted note yet)
+    cost: list[list[float]] = [[0.05 * f for (_, f) in cand[0]]]
+    back: list[list[int]] = [[-1] * len(cand[0])]
+    hand: list[int | None] = [f if f > 0 else None for (_, f) in cand[0]]
+
+    for i in range(1, n):
+        cur = cand[i]
+        row_cost: list[float] = []
+        row_back: list[int] = []
+        new_hand: list[int | None] = []
+        for (_s, f) in cur:
+            best_c, best_k = float("inf"), -1
+            for k, prev_c in enumerate(cost[i - 1]):
+                move = 0.0 if (f == 0 or hand[k] is None) else abs(f - hand[k])
+                c = prev_c + move + 0.05 * f
+                if c < best_c:
+                    best_c, best_k = c, k
+            row_cost.append(best_c)
+            row_back.append(best_k)
+            new_hand.append(f if f > 0 else hand[best_k])
+        cost.append(row_cost)
+        back.append(row_back)
+        hand = new_hand
+
+    result: list[tuple[int, int]] = [(-1, -1)] * n
+    j = min(range(len(cost[-1])), key=lambda x: cost[-1][x])
+    for i in range(n - 1, -1, -1):
+        result[i] = cand[i][j]
+        j = back[i][j]
+    return result
+
+
 # ── Step 1: download audio ────────────────────────────────────────────────────
 
 def _download_audio(work_dir: str, title: str, artist: str) -> str:
@@ -159,25 +219,6 @@ def _has_guitar_energy(audio_path: str, threshold: float = 0.02) -> bool:
 
 # ── Step 4: note transcription (basic-pitch) ─────────────────────────────────
 
-def _estimate_bpm(audio_path: str) -> float:
-    """Estimate BPM from audio. Should be called on the full mix, not a stem."""
-    import librosa
-    y, sr = librosa.load(audio_path, sr=None, mono=True, duration=60)
-    # Frame-by-frame tempo then take median — more robust than single beat_track estimate
-    tempo_frames = librosa.feature.tempo(y=y, sr=sr, aggregate=None)
-    bpm = float(np.median(tempo_frames)) if len(tempo_frames) > 0 else 120.0
-    if bpm < 20:
-        bpm = 120.0
-    # Normalize to 60-130 BPM (typical guitar music range).
-    # librosa frequently detects double-tempo on energetic rock; halving corrects it.
-    while bpm > 130:
-        bpm /= 2.0
-    while bpm < 60:
-        bpm *= 2.0
-    logger.info("BPM detected: %.1f", bpm)
-    return bpm
-
-
 def _transcribe(audio_path: str) -> np.ndarray:
     """Run basic-pitch on the guitar stem. Returns note_events array."""
     from basic_pitch.inference import predict
@@ -197,34 +238,38 @@ def _transcribe(audio_path: str) -> np.ndarray:
 
 # ── Step 5: build tab sections ────────────────────────────────────────────────
 
-def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> list[dict]:
-    """Convert note events into a list of tab sections."""
-    quarter_dur = 60.0 / max(bpm, 20)
-    measure_dur = 4 * quarter_dur              # always 4/4
-    beat_dur = measure_dur / _BEATS_PER_MEASURE  # eighth-note slot width
-    total_s = duration_ms / 1000
-    total_measures = max(1, int(total_s / measure_dur) + 1)
+def _build_sections(note_events, grid) -> list[dict]:
+    """Convert note events into a list of tab sections.
+
+    Onsets are snapped to the detected beat grid (robust to tempo drift) and
+    string/fret positions are assigned jointly over the whole note sequence so
+    the fretting hand doesn't teleport between consecutive notes.
+
+    Empty interior measure chunks are KEPT: the frontend player walks each
+    guitar's sections sequentially, so dropping a silent chunk in one guitar
+    would shift its later notes earlier and desync it from the other tracks.
+    """
+    total_measures = grid.total_measures
+
+    # Filter playable events, sort by onset so position assignment sees the
+    # real note order.
+    events = [
+        e for e in note_events
+        if float(e[3]) >= _MIN_VELOCITY / 127 and _candidates(int(e[2]))
+    ]
+    events.sort(key=lambda e: float(e[0]))
+    positions = _assign_positions([int(e[2]) for e in events])
 
     # (measure_idx, string) → {beat → (fret, velocity, dur_beats)} — keeps loudest per slot
     best: dict[tuple[int, int], dict[int, tuple[int, float, int]]] = {}
 
-    for event in note_events:
+    for event, (string_num, fret) in zip(events, positions):
         start_s = float(event[0])
         end_s   = float(event[1])
-        pitch = int(event[2])
         velocity = float(event[3])
 
-        if velocity < _MIN_VELOCITY / 127:
-            continue
-
-        pos = _midi_to_guitar(pitch)
-        if pos is None:
-            continue
-
-        m_idx = min(int(start_s / measure_dur), total_measures - 1)
-        beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
-        dur_beats = max(1, round((end_s - start_s) / beat_dur))
-        string_num, fret = pos
+        m_idx, beat = grid.slot(start_s)
+        dur_beats = max(1, round(grid.duration_slots(start_s, end_s)))
         key = (m_idx, string_num)
         if key not in best:
             best[key] = {}
@@ -241,11 +286,10 @@ def _build_sections(note_events: np.ndarray, bpm: float, duration_ms: int) -> li
     sections = []
     for i in range(0, total_measures, _MEASURES_PER_SECTION):
         chunk = notes_by_measure[i: i + _MEASURES_PER_SECTION]
-        if any(chunk):
-            sections.append({
-                "name": f"Section {len(sections) + 1}",
-                "measures": [{"notes": m} for m in chunk],
-            })
+        sections.append({
+            "name": f"Section {len(sections) + 1}",
+            "measures": [{"notes": m} for m in chunk],
+        })
 
     if not sections:
         sections = [{"name": "Section 1", "measures": [{"notes": []}]}]
@@ -267,14 +311,8 @@ def _split_notes(note_events) -> tuple:
     return lead, rhythm
 
 
-def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
+def _beat_role(note_events: list, grid) -> dict:
     """Count how many beat slots have 1 note (melodic) vs 2+ notes (chordal)."""
-    quarter_dur = 60.0 / max(bpm, 20)
-    measure_dur = 4 * quarter_dur
-    beat_dur = measure_dur / _BEATS_PER_MEASURE
-    total_s = duration_ms / 1000
-    total_measures = max(1, int(total_s / measure_dur) + 1)
-
     slot_counts: dict[tuple[int, int], int] = {}
     for event in note_events:
         start_s = float(event[0])
@@ -282,8 +320,7 @@ def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
         velocity = float(event[3])
         if velocity < _MIN_VELOCITY / 127 or _midi_to_guitar(pitch) is None:
             continue
-        m_idx = min(int(start_s / measure_dur), total_measures - 1)
-        beat = min(int((start_s % measure_dur) / beat_dur), _BEATS_PER_MEASURE - 1)
+        m_idx, beat = grid.slot(start_s)
         slot_counts[(m_idx, beat)] = slot_counts.get((m_idx, beat), 0) + 1
 
     if not slot_counts:
@@ -298,15 +335,14 @@ def _beat_role(note_events: list, bpm: float, duration_ms: int) -> dict:
 def _needs_two_guitars(
     lead_events: list,
     rhythm_events: list,
-    bpm: float,
-    duration_ms: int,
+    grid,
 ) -> bool:
     """True only when lead is melodic (single notes) and rhythm is chordal (multi-note beats)."""
     if len(lead_events) < 20 or len(rhythm_events) < 20:
         return False
 
-    lead_role = _beat_role(lead_events, bpm, duration_ms)
-    rhythm_role = _beat_role(rhythm_events, bpm, duration_ms)
+    lead_role = _beat_role(lead_events, grid)
+    rhythm_role = _beat_role(rhythm_events, grid)
 
     lead_is_melodic = lead_role["solo_ratio"] > 0.60    # mostly single notes
     rhythm_is_chordal = rhythm_role["chord_ratio"] > 0.20  # enough simultaneous notes
@@ -472,8 +508,10 @@ def _run_pipeline_sync(
                 logger.info("No guitar energy detected — skipping transcription")
                 return {"has_guitar": False, "tab_data": None, "source": "ml"}
 
-            # Estimate BPM from full mix — drums make beat tracking far more reliable
-            bpm = _estimate_bpm(audio)
+            # Beat-track the full mix — drums make beat tracking far more reliable
+            from app.services.beat_grid import build_beat_grid
+            grid = build_beat_grid(audio, duration_ms)
+            bpm = grid.bpm
 
             on_step("transcribing")
             note_events = _transcribe(guitar)
@@ -488,17 +526,17 @@ def _run_pipeline_sync(
                 lyrics_sections = fetch_lyrics_sections(title, artist, settings.genius_access_token)
                 logger.info("Lyrics: %d sections fetched", len(lyrics_sections))
 
-            if _needs_two_guitars(lead_events, rhythm_events, bpm, duration_ms):
+            if _needs_two_guitars(lead_events, rhythm_events, grid):
                 logger.info("Two-guitar split: lead=%d notes, rhythm=%d notes", len(lead_events), len(rhythm_events))
-                lead_sections = _build_sections(lead_events, bpm, duration_ms)
-                rhythm_sections = _build_sections(rhythm_events, bpm, duration_ms)
+                lead_sections = _build_sections(lead_events, grid)
+                rhythm_sections = _build_sections(rhythm_events, grid)
                 guitars = [
                     {"name": "Lead Guitar", "sections": _assign_lyrics(lead_sections, lyrics_sections)},
                     {"name": "Rhythm Guitar", "sections": _assign_lyrics(rhythm_sections, lyrics_sections)},
                 ]
             else:
                 logger.info("Single guitar: lead=%d, rhythm=%d notes — merging", len(lead_events), len(rhythm_events))
-                all_sections = _build_sections(note_events, bpm, duration_ms)
+                all_sections = _build_sections(note_events, grid)
                 guitars = [
                     {"name": "Guitar", "sections": _assign_lyrics(all_sections, lyrics_sections)},
                 ]

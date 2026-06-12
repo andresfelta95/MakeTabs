@@ -59,6 +59,26 @@ def _measure_quarters(measure: dict) -> float:
     return 4.0 * num / den
 
 
+def _string_base(track_json: dict) -> int:
+    """Songsterr CDN track JSON numbers strings from 0 (string 0 = highest
+    string); only some very old revisions are 1-based. A track that uses
+    string 0 must be 0-based; one that reaches string == len(tuning) must be
+    1-based; anything else defaults to 0-based (verified against the chroma
+    of real recordings — see test_accuracy.py)."""
+    n_strings = len(track_json.get("tuning") or []) or int(track_json.get("strings") or 6)
+    saw_max = False
+    for m in track_json.get("measures", []) or []:
+        for v in m.get("voices", []) or []:
+            for b in v.get("beats", []) or []:
+                for nt in b.get("notes", []) or []:
+                    s = nt.get("string")
+                    if s == 0:
+                        return 0
+                    if s is not None and int(s) >= n_strings:
+                        saw_max = True
+    return 1 if saw_max else 0
+
+
 def _tuning_to_names(tuning: list[int]) -> list[str]:
     """MIDI pitches (Songsterr high→low) → note names (MakeTabs low→high).
 
@@ -82,6 +102,7 @@ def _build_track_sections(
     """Build the [{"name", "measures": [{"notes": [...]}]}, ...] sections list
     for a single Songsterr guitar track."""
     strings_count = track_json.get("strings") or len(track_meta.tuning) or 6
+    string_base = _string_base(track_json)
     measures = track_json.get("measures", [])
 
     notes_by_measure: list[list[dict]] = []
@@ -101,9 +122,9 @@ def _build_track_sections(
                             continue
                         if "string" not in note or "fret" not in note:
                             continue
-                        # Songsterr 1-indexed high→low → MakeTabs 1-indexed low→high
-                        ss_str = int(note["string"])
-                        mt_str = strings_count + 1 - ss_str
+                        # Songsterr high→low (usually 0-indexed) → MakeTabs 1-indexed low→high
+                        ss_str = int(note["string"]) - string_base
+                        mt_str = strings_count - ss_str
                         if not (1 <= mt_str <= 6):
                             continue
                         slot = round(voice_pos * 4 * scale)
@@ -149,6 +170,8 @@ def _track_accompaniment(track_meta: SongsterrTrack, track_json: dict) -> list[d
     """
     tuning = track_json.get("tuning") or track_meta.tuning or []
     is_drums = bool(track_meta.is_drums)
+    string_base = _string_base(track_json)
+    capo = int(track_json.get("capo") or 0)  # frets are written relative to the capo
     measures = track_json.get("measures", [])
     measure_quarters = [_measure_quarters(m) for m in measures]
 
@@ -189,10 +212,10 @@ def _track_accompaniment(track_meta: SongsterrTrack, track_json: dict) -> list[d
                         else:
                             if "string" not in note:
                                 continue
-                            ss_str = int(note["string"])
-                            if not (1 <= ss_str <= len(tuning)):
+                            ss_str = int(note["string"]) - string_base
+                            if not (0 <= ss_str < len(tuning)):
                                 continue
-                            pitch = int(tuning[ss_str - 1]) + int(note["fret"])
+                            pitch = int(tuning[ss_str]) + int(note["fret"]) + capo
                         if not (0 <= pitch <= 127):
                             continue
                         t = measure_start_s[m_idx] + voice_q * quarter_s
@@ -365,6 +388,8 @@ def build_midi_bytes(
             midi_channel += 1
 
         tuning = track_json.get("tuning") or ss_track.tuning
+        string_base = _string_base(track_json)
+        capo = int(track_json.get("capo") or 0)
         program = int(ss_track.instrument_id) if ss_track.instrument_id is not None else 24
         program = max(0, min(127, program))
 
@@ -393,10 +418,10 @@ def build_midi_bytes(
                             else:
                                 if "string" not in note:
                                     continue
-                                ss_str = int(note["string"])
-                                if not (1 <= ss_str <= len(tuning)):
+                                ss_str = int(note["string"]) - string_base
+                                if not (0 <= ss_str < len(tuning)):
                                     continue
-                                pitch = int(tuning[ss_str - 1]) + int(note["fret"])
+                                pitch = int(tuning[ss_str]) + int(note["fret"]) + capo
                             if 0 <= pitch <= 127:
                                 velocity = 90
                                 events.append((voice_tick, "on", pitch, velocity))
