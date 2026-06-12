@@ -54,7 +54,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "2.4.1"  # 2.4.1: harmony = main rhythm track + measure fill, re-strikes sustain (no more flicker)
+CURRENT_ALGORITHM = "2.5.0"  # 2.5.0: rhythm track owns harmony bed (lead demoted); solos featured in instrumental runs
 
 
 # ── Path A: Songsterr ─────────────────────────────────────────────────────────

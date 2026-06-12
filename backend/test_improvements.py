@@ -357,6 +357,72 @@ check("Harmony keeps rhythm track despite crossing lead",
 check("Harmony fills empty measures from other tracks",
       h_by_measure.get(2) == {76}, f"got {h_by_measure}")
 
+# A lead-named track never becomes the harmony bed, even when denser than the
+# rhythm track — but it TAKES OVER the channel during instrumental runs (the
+# guitar solo). Vocals sing in measures 0-1; measures 2-4 are an instrumental
+# run where the lead plays a dense solo over the still-chugging rhythm.
+solo_vocal_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    "automations": {"tempo": [{"measure": 0, "bpm": 120}]},
+    "measures": [_measure([_note_beat(0, 7), rest, rest, rest])] * 2
+                + [_measure([rest, rest, rest, rest])] * 3,
+}
+solo_rhythm_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    "measures": [_measure([_note_beat(1, 0), rest, _note_beat(1, 0), rest])] * 5,  # 59
+}
+solo_lead_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    # denser than rhythm overall AND inside the run: 4 notes/measure of pitch 76
+    "measures": [_measure([_note_beat(0, 12)] * 4)] * 5,
+}
+sv = _track(7, "Vocals", vocal=True)
+sr = _track(1, "Rhythm Guitar", guitar=True)
+sl = _track(2, "Lead Guitar", guitar=True)
+s_song = SongsterrSong(song_id=9, revision_id=1, image="x", artist="A", title="T",
+                       tracks=[sv, sr, sl], popular_track_guitar=1)
+s_data = build_chiptune_data(s_song, [(sv, solo_vocal_json), (sr, solo_rhythm_json), (sl, solo_lead_json)])
+s_by_measure = {}
+for si, sec in enumerate(s_data["tracks"]["harmony"]["sections"]):
+    for mi, m in enumerate(sec["measures"]):
+        for n in m["notes"]:
+            s_by_measure.setdefault(si * 4 + mi, set()).add(n["pitch"])
+check("Lead never the harmony bed while vocals sing",
+      s_by_measure.get(0) == {59} and s_by_measure.get(1) == {59}, f"got {s_by_measure}")
+check("Solo takes over harmony during instrumental run",
+      s_by_measure.get(2) == {76} and s_by_measure.get(3) == {76} and s_by_measure.get(4) == {76},
+      f"got {s_by_measure}")
+
+# A quiet 2-measure break with only a couple of stray lead notes does NOT
+# hijack the channel — the rhythm bed keeps it.
+no_hijack_lead_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    "measures": [_measure([rest, rest, rest, rest])] * 2
+                + [_measure([_note_beat(0, 12), rest, rest, rest]),
+                   _measure([rest, rest, rest, rest])],
+}
+nh_vocal_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    "automations": {"tempo": [{"measure": 0, "bpm": 120}]},
+    "measures": [_measure([_note_beat(0, 7), rest, rest, rest])] * 2
+                + [_measure([rest, rest, rest, rest])] * 2,
+}
+nh_rhythm_json = {
+    "strings": 6, "tuning": STD_TUNING,
+    "measures": [_measure([_note_beat(1, 0), rest, _note_beat(1, 0), rest])] * 4,
+}
+nh_song = SongsterrSong(song_id=10, revision_id=1, image="x", artist="A", title="T",
+                        tracks=[sv, sr, sl], popular_track_guitar=1)
+nh_data = build_chiptune_data(
+    nh_song, [(sv, nh_vocal_json), (sr, nh_rhythm_json), (sl, no_hijack_lead_json)])
+nh_pitches = set()
+for sec in nh_data["tracks"]["harmony"]["sections"]:
+    for m in sec["measures"]:
+        for n in m["notes"]:
+            nh_pitches.add(n["pitch"])
+check("Stray notes don't hijack a quiet break", nh_pitches == {59}, f"got {nh_pitches}")
+
+
 # Capo shifts every pitch up (frets are written relative to the capo).
 capo_json = {
     "strings": 6, "tuning": STD_TUNING, "capo": 3,

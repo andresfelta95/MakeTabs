@@ -7,9 +7,11 @@ Role mapping:
   melody  (square)   — the VOCAL track when the tab has one (Songsterr encodes
                        the sung melody as notes, usually on a sax program);
                        otherwise the "main" guitar track
-  harmony (sawtooth) — the densest remaining pitched track (the rhythm
-                       guitar); other pitched tracks only fill measures it
-                       leaves empty, up to 2 notes per slot
+  harmony (sawtooth) — the densest remaining non-lead pitched track (the
+                       rhythm guitar); other pitched tracks only fill measures
+                       it leaves empty, up to 2 notes per slot. During
+                       instrumental runs the busiest track (the solo) takes
+                       the channel over.
   bass    (triangle) — the bass track, lowest note per slot
   drums   (noise)    — GM percussion notes folded into kick / snare / hihat
 
@@ -182,6 +184,26 @@ def _tracks_to_grid(
     return grid
 
 
+def _fill_grids(
+    grids: list[dict[int, list[tuple[int, float]]]],
+) -> dict[int, list[tuple[int, float]]]:
+    """Merge per-track grids; each later grid only fills measures all the
+    earlier ones left empty. One coherent line per measure instead of a
+    per-slot mash of every source (which made the channel flicker between
+    tracks — chords kept getting displaced by whatever line crossed them)."""
+    out: dict[int, list[tuple[int, float]]] = {}
+    covered: set[int] = set()
+    for grid in grids:
+        added: set[int] = set()
+        for slot, notes in grid.items():
+            if slot // _BEATS_PER_MEASURE in covered:
+                continue
+            out.setdefault(slot, []).extend(notes)
+            added.add(slot // _BEATS_PER_MEASURE)
+        covered |= added
+    return out
+
+
 def _grid_with_measure_fill(
     track_jsons: list[dict],
     slot_dur: float,
@@ -189,22 +211,69 @@ def _grid_with_measure_fill(
     starts: list[float],
     quarter_s: list[float],
 ) -> dict[int, list[tuple[int, float]]]:
-    """Grid from the first track; each later track only fills measures all the
-    earlier ones left empty. One coherent line per measure instead of a
-    per-slot mash of every source (which made the channel flicker between
-    tracks — chords kept getting displaced by whatever line crossed them)."""
-    grid: dict[int, list[tuple[int, float]]] = {}
-    covered: set[int] = set()
-    for tj in track_jsons:
-        track_grid = _tracks_to_grid([tj], slot_dur, total_slots, starts, quarter_s)
-        added: set[int] = set()
-        for slot, notes in track_grid.items():
-            if slot // _BEATS_PER_MEASURE in covered:
-                continue
-            grid.setdefault(slot, []).extend(notes)
-            added.add(slot // _BEATS_PER_MEASURE)
-        covered |= added
-    return grid
+    return _fill_grids([
+        _tracks_to_grid([tj], slot_dur, total_slots, starts, quarter_s)
+        for tj in track_jsons
+    ])
+
+
+def _feature_instrumental_runs(
+    base: dict[int, list[tuple[int, float]]],
+    grids: list[dict[int, list[tuple[int, float]]]],
+    lead_flags: list[bool],
+    melody_measures: set[int],
+    total_measures: int,
+) -> None:
+    """During instrumental stretches (≥2 consecutive measures with no melody
+    notes) a lead track takes the channel over — that's the guitar solo /
+    intro riff, and with the rhythm track owning the channel by default it
+    would never be heard. Mutates `base` in place.
+
+    A lead-named track that's clearly playing (≥2 ONSETS per measure on
+    average — onsets, because a 16th-chugging bed would always out-count a
+    single-note solo line in raw notes) wins outright. In tabs without
+    lead-named tracks, the busiest track by raw notes takes over only when it
+    beats the bed, so a couple of stray fill notes don't hijack a quiet
+    break. Measures inside the run where the featured track is silent keep
+    whatever the bed had."""
+    run: list[int] = []
+    for m in range(total_measures + 1):
+        if m < total_measures and m not in melody_measures:
+            run.append(m)
+            continue
+        if len(run) >= 2 and grids:
+            rset = set(run)
+            onsets = [
+                sum(1 for slot in g if slot // _BEATS_PER_MEASURE in rset)
+                for g in grids
+            ]
+            notes_n = [
+                sum(len(notes) for slot, notes in g.items()
+                    if slot // _BEATS_PER_MEASURE in rset)
+                for g in grids
+            ]
+            need = 2 * len(run)
+            best = None
+            lead_cands = [i for i, is_lead in enumerate(lead_flags)
+                          if is_lead and onsets[i] >= need]
+            if lead_cands:
+                best = max(lead_cands, key=onsets.__getitem__)
+            else:
+                b = max(range(len(notes_n)), key=notes_n.__getitem__)
+                if notes_n[b] > notes_n[0] and notes_n[b] >= need:
+                    best = b
+            if best is not None and best != 0:
+                featured: dict[int, dict[int, list[tuple[int, float]]]] = {}
+                for slot, notes in grids[best].items():
+                    f_m = slot // _BEATS_PER_MEASURE
+                    if f_m in rset:
+                        featured.setdefault(f_m, {})[slot] = notes
+                for f_m, slots in featured.items():
+                    for slot in [s for s in base if s // _BEATS_PER_MEASURE == f_m]:
+                        del base[slot]
+                    for slot, notes in slots.items():
+                        base[slot] = list(notes)
+        run = []
 
 
 # Harmony channel limits — keeps the mix from turning into a wall of sawtooth.
@@ -320,9 +389,17 @@ def _drums_to_patterns(
 # "Backing Vocals", "Harmony Vocals", gang/choir parts — never the lead line.
 _BACKING_RE = re.compile(r"backing|backup|harmon|choir|chorus|gang", re.IGNORECASE)
 
+# Lead/solo guitars can't be the harmony bed — they'd replace the rhythm part
+# everywhere; they fill gaps and get featured during instrumental runs instead.
+_LEAD_RE = re.compile(r"lead|solo", re.IGNORECASE)
+
 
 def _is_backing_vocal(track: SongsterrTrack) -> bool:
     return bool(_BACKING_RE.search(f"{track.name} {track.instrument}"))
+
+
+def _is_lead_guitar(track: SongsterrTrack) -> bool:
+    return bool(_LEAD_RE.search(f"{track.name} {track.instrument}"))
 
 
 def _note_count(track_json: dict) -> int:
@@ -374,12 +451,15 @@ def build_chiptune_data(
     if melody_pair is None:
         return None
 
-    # Harmony: the densest remaining pitched track (in practice the rhythm
-    # guitar — the part that actually drives the song); the others (2nd
-    # guitar, piano, the clean intro guitar, …) only fill measures it leaves
-    # empty, so quiet sections still aren't silent.
-    harmony_jsons = [d for (t, d) in pitched if t is not melody_pair[0]]
-    harmony_jsons.sort(key=_note_count, reverse=True)
+    # Harmony: the densest remaining non-lead pitched track (in practice the
+    # rhythm guitar — the part that actually drives the song); the others
+    # (2nd guitar, piano, the clean intro guitar, …) only fill measures it
+    # leaves empty, so quiet sections still aren't silent. Lead/solo tracks
+    # sort last so they can't become the bed, but they take the channel over
+    # during instrumental runs (see _feature_instrumental_runs).
+    harmony_pairs = [(t, d) for (t, d) in pitched if t is not melody_pair[0]]
+    harmony_pairs.sort(key=lambda p: (_is_lead_guitar(p[0]), -_note_count(p[1])))
+    harmony_jsons = [d for _, d in harmony_pairs]
 
     # Timing reference: the track with the most measures AND tempo automations
     # (maps are usually identical, but some track JSONs omit them).
@@ -406,9 +486,15 @@ def build_chiptune_data(
     melody_grid = _grid_with_measure_fill(
         [melody_pair[1], *melody_fill_jsons], slot_dur, total_slots, starts, quarter_s)
     melody_sections = _grid_to_sections(melody_grid, total_measures, "melody")
-    harmony_sections = _grid_to_sections(
-        _grid_with_measure_fill(harmony_jsons, slot_dur, total_slots, starts, quarter_s),
-        total_measures, "harmony")
+    harmony_grids = [
+        _tracks_to_grid([d], slot_dur, total_slots, starts, quarter_s)
+        for d in harmony_jsons
+    ]
+    harmony_grid = _fill_grids(harmony_grids)
+    melody_measures = {slot // _BEATS_PER_MEASURE for slot in melody_grid}
+    lead_flags = [_is_lead_guitar(t) for t, _ in harmony_pairs]
+    _feature_instrumental_runs(harmony_grid, harmony_grids, lead_flags, melody_measures, total_measures)
+    harmony_sections = _grid_to_sections(harmony_grid, total_measures, "harmony")
     bass_sections = _grid_to_sections(
         _tracks_to_grid([bass[1]] if bass else [], slot_dur, total_slots, starts, quarter_s),
         total_measures, "bass")
