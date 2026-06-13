@@ -394,8 +394,12 @@ def _drums_to_patterns(
 _BACKING_RE = re.compile(r"backing|backup|harmon|choir|chorus|gang", re.IGNORECASE)
 
 # Lead/solo guitars can't be the harmony bed — they'd replace the rhythm part
-# everywhere; they fill gaps and get featured during instrumental runs instead.
+# everywhere; instead they own the dedicated lead channel (see _pick_lead).
 _LEAD_RE = re.compile(r"lead|solo", re.IGNORECASE)
+
+# Keyboard-family tracks — second choice for the lead channel when there's no
+# lead/solo guitar (piano ballads etc.).
+_KEYS_RE = re.compile(r"piano|keys|keyboard|organ|rhodes|wurli|synth|grand", re.IGNORECASE)
 
 
 def _is_backing_vocal(track: SongsterrTrack) -> bool:
@@ -404,6 +408,34 @@ def _is_backing_vocal(track: SongsterrTrack) -> bool:
 
 def _is_lead_guitar(track: SongsterrTrack) -> bool:
     return bool(_LEAD_RE.search(f"{track.name} {track.instrument}"))
+
+
+def _is_keys(track: SongsterrTrack) -> bool:
+    return bool(_KEYS_RE.search(f"{track.name} {track.instrument}"))
+
+
+def _pick_lead(
+    pitched: list[tuple[SongsterrTrack, dict]],
+    melody_track: SongsterrTrack,
+    bed_track: SongsterrTrack | None,
+) -> tuple[SongsterrTrack, dict] | None:
+    """Choose the source for the dedicated lead/counter-melody channel.
+
+    Priority: a lead/solo-named guitar (the actual solo line), then a keyboard
+    track (piano), then nothing — we don't force a third rhythm guitar onto the
+    channel, which would just thicken the bed. Never the melody or harmony-bed
+    track. Returns None when there's no good candidate."""
+    cands = [
+        (t, d) for (t, d) in pitched
+        if t is not melody_track and t is not bed_track and _note_count(d) > 0
+    ]
+    leads = [(t, d) for (t, d) in cands if _is_lead_guitar(t)]
+    if leads:
+        return max(leads, key=lambda p: _note_count(p[1]))
+    keys = [(t, d) for (t, d) in cands if _is_keys(t)]
+    if keys:
+        return max(keys, key=lambda p: _note_count(p[1]))
+    return None
 
 
 def _note_count(track_json: dict) -> int:
@@ -463,6 +495,14 @@ def build_chiptune_data(
     # during instrumental runs (see _feature_instrumental_runs).
     harmony_pairs = [(t, d) for (t, d) in pitched if t is not melody_pair[0]]
     harmony_pairs.sort(key=lambda p: (_is_lead_guitar(p[0]), -_note_count(p[1])))
+
+    # Dedicated lead/counter-melody channel: the solo guitar (or piano) plays on
+    # its own voice, including under the vocals where the single harmony channel
+    # can't carry it. Exclude it from the harmony fill so it isn't doubled.
+    bed_track = harmony_pairs[0][0] if harmony_pairs else None
+    lead_pair = _pick_lead(pitched, melody_pair[0], bed_track)
+    if lead_pair is not None:
+        harmony_pairs = [p for p in harmony_pairs if p[0] is not lead_pair[0]]
     harmony_jsons = [d for _, d in harmony_pairs]
 
     # Timing reference: the track with the most measures AND tempo automations
@@ -496,8 +536,18 @@ def build_chiptune_data(
     ]
     harmony_grid = _fill_grids(harmony_grids)
     melody_measures = {slot // _BEATS_PER_MEASURE for slot in melody_grid}
-    lead_flags = [_is_lead_guitar(t) for t, _ in harmony_pairs]
-    _feature_instrumental_runs(harmony_grid, harmony_grids, lead_flags, melody_measures, total_measures)
+
+    # Lead channel — a single top line from the solo/piano track, over ALL
+    # measures (it's its own voice now, not a fill). When we have one, the
+    # harmony stays a pure rhythm bed; otherwise fall back to the old behaviour
+    # of surfacing the solo inside the harmony during instrumental runs.
+    lead_sections = None
+    if lead_pair is not None:
+        lead_grid = _tracks_to_grid([lead_pair[1]], slot_dur, total_slots, starts, quarter_s)
+        lead_sections = _grid_to_sections(lead_grid, total_measures, "melody")
+    else:
+        lead_flags = [_is_lead_guitar(t) for t, _ in harmony_pairs]
+        _feature_instrumental_runs(harmony_grid, harmony_grids, lead_flags, melody_measures, total_measures)
     harmony_sections = _grid_to_sections(harmony_grid, total_measures, "harmony")
     bass_sections = _grid_to_sections(
         _tracks_to_grid([bass[1]] if bass else [], slot_dur, total_slots, starts, quarter_s),
@@ -505,22 +555,27 @@ def build_chiptune_data(
     drum_patterns = _drums_to_patterns(drums[1], slot_dur, total_slots, starts, quarter_s) if drums else []
 
     logger.info(
-        "Songsterr chiptune: melody=%s harmony=%d tracks bass=%s drums=%s (%.0fs, %d measures @ %.0f BPM)",
+        "Songsterr chiptune: melody=%s harmony=%d tracks lead=%s bass=%s drums=%s (%.0fs, %d measures @ %.0f BPM)",
         melody_pair[0].name,
         len(harmony_jsons),
+        lead_pair[0].name if lead_pair else "—",
         bass[0].name if bass else "—",
         drums[0].name if drums else "—",
         total_s, total_measures, bpm,
     )
 
+    tracks_out = {
+        "melody":  {"waveform": "square",   "sections": melody_sections},
+        "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
+        "bass":    {"waveform": "triangle", "sections": bass_sections},
+        "drums":   {"waveform": "noise",    "patterns": drum_patterns},
+    }
+    if lead_sections is not None:
+        tracks_out["lead"] = {"waveform": "pulse", "sections": lead_sections}
+
     return {
         "bpm": round(bpm, 1),
         "source": "songsterr",
         "slots_per_measure": _BEATS_PER_MEASURE,
-        "tracks": {
-            "melody":  {"waveform": "square",   "sections": melody_sections},
-            "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
-            "bass":    {"waveform": "triangle", "sections": bass_sections},
-            "drums":   {"waveform": "noise",    "patterns": drum_patterns},
-        },
+        "tracks": tracks_out,
     }

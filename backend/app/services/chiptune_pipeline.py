@@ -59,7 +59,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "2.6.0"  # 2.6.0: 32nd-note grid + looser onset/frame thresholds — captures faster passages
+CURRENT_ALGORITHM = "2.7.0"  # 2.7.0: dedicated lead channel (solo guitar / piano) alongside rhythm harmony
 
 
 # ── Path A: Songsterr ─────────────────────────────────────────────────────────
@@ -329,6 +329,10 @@ def _detect_drums(drums_path: str, grid) -> list[dict]:
 # (or the vocal stem as too noisy) and the guitar stem carries the melody.
 _MIN_VOCAL_NOTES = 30
 
+# Below this many transcribed piano notes the lead channel is dropped rather
+# than filled with stem-bleed noise.
+_MIN_LEAD_NOTES = 12
+
 def _run_chiptune_sync(
     title: str,
     artist: str,
@@ -369,10 +373,26 @@ def _run_chiptune_sync(
                 max_per_slot=2,
             )
 
+            lead_sections = None
             if vocal_notes >= _MIN_VOCAL_NOTES:
                 melody_sections = vocal_sections
                 harmony_sections = guitar_sections
-                logger.info("Melody from vocals (%d notes); harmony from guitar (%d)", vocal_notes, guitar_notes)
+                # Lead channel = the piano stem (unused otherwise for vocal
+                # songs) as a counter-melody, so keys are finally heard. Demucs
+                # can't split lead guitar out of the single guitar stem, so for
+                # ML vocal songs the lead voice is piano; the Songsterr path
+                # uses the real solo guitar when the song is on Songsterr.
+                piano_sections, piano_notes = _transcribe_tonal(
+                    stems["piano"], grid,
+                    min_freq=130.0, max_freq=2000.0,
+                    melodic=True,
+                )
+                if piano_notes >= _MIN_LEAD_NOTES:
+                    lead_sections = piano_sections
+                logger.info(
+                    "Melody from vocals (%d notes); harmony from guitar (%d); lead from piano (%d)",
+                    vocal_notes, guitar_notes, piano_notes,
+                )
             else:
                 # Instrumental: melody from guitar (single line), harmony from piano.
                 melody_sections, melody_notes = _transcribe_tonal(
@@ -396,16 +416,20 @@ def _run_chiptune_sync(
             on_step("building")
             drum_patterns = _detect_drums(stems["drums"], grid)
 
+            tracks_out = {
+                "melody":  {"waveform": "square",   "sections": melody_sections},
+                "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
+                "bass":    {"waveform": "triangle", "sections": bass_sections},
+                "drums":   {"waveform": "noise",    "patterns": drum_patterns},
+            }
+            if lead_sections is not None:
+                tracks_out["lead"] = {"waveform": "pulse", "sections": lead_sections}
+
             chiptune_data = {
                 "bpm": round(grid.bpm, 1),
                 "source": "ml",
                 "slots_per_measure": grid.slots_per_measure,
-                "tracks": {
-                    "melody":  {"waveform": "square",   "sections": melody_sections},
-                    "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
-                    "bass":    {"waveform": "triangle", "sections": bass_sections},
-                    "drums":   {"waveform": "noise",    "patterns": drum_patterns},
-                },
+                "tracks": tracks_out,
             }
 
             logger.info(

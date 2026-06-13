@@ -152,6 +152,10 @@ export interface ChiptuneData {
   tracks: {
     melody: ChiptuneTonalTrack;
     harmony?: ChiptuneTonalTrack;
+    /** Lead / counter-melody voice (solo guitar, or piano) — plays alongside
+     *  the rhythm harmony so licks under the vocals are heard. Absent on jobs
+     *  generated before the lead channel existed. */
+    lead?: ChiptuneTonalTrack;
     bass: ChiptuneTonalTrack;
     drums: ChiptuneDrumTrack;
   };
