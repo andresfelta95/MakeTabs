@@ -29,7 +29,10 @@ function buildTonalTimeline(
   const measureDur = 4 * quarterDur;
   const beatDur = measureDur / beatsPerMeasure;
   const osc = track.waveform as OscillatorType;
-  const gainLevel = osc === "triangle" ? 0.32 : osc === "sawtooth" ? 0.12 : 0.22;
+  // Sawtooth (harmony) raised from 0.12: it carries featured guitar solos during
+  // instrumental runs, and at the old level they were inaudible under the louder
+  // melody/bass. Still below them so dense rhythm chords don't wash the mix out.
+  const gainLevel = osc === "triangle" ? 0.32 : osc === "sawtooth" ? 0.17 : 0.22;
 
   const notes: ScheduledNote[] = [];
   let cursor = 0;
@@ -120,6 +123,18 @@ function playTone(ac: AudioContext, out: AudioNode, note: ScheduledNote, when: n
   osc.stop(when + dur + 0.02);
 }
 
+// White-noise burst — the basis of realistic snare/hi-hat hits. A short buffer
+// is cheap to (re)create per hit and works in both the live and offline contexts.
+function noiseBurst(ac: AudioContext, seconds: number): AudioBufferSourceNode {
+  const len = Math.max(1, Math.floor(ac.sampleRate * seconds));
+  const buffer = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  const src = ac.createBufferSource();
+  src.buffer = buffer;
+  return src;
+}
+
 function playDrum(ac: AudioContext, out: AudioNode, type: "kick" | "snare" | "hihat", when: number) {
   const gain = ac.createGain();
   gain.connect(out);
@@ -135,24 +150,35 @@ function playDrum(ac: AudioContext, out: AudioNode, type: "kick" | "snare" | "hi
     osc.start(when);
     osc.stop(when + 0.4);
   } else if (type === "snare") {
-    const noise = ac.createOscillator();
-    noise.connect(gain);
-    noise.type = "sawtooth";
-    noise.frequency.value = 100;
-    gain.gain.setValueAtTime(0.15, when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.15);
-    noise.start(when);
-    noise.stop(when + 0.15);
+    // Body tone (triangle ~180Hz) + a band-passed noise crack — reads as an
+    // actual snare instead of the old buzzy sawtooth.
+    const noise = noiseBurst(ac, 0.2);
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.7;
+    noise.connect(bp);
+    bp.connect(gain);
+    const body = ac.createOscillator();
+    body.type = "triangle";
+    body.frequency.setValueAtTime(180, when);
+    body.frequency.exponentialRampToValueAtTime(100, when + 0.1);
+    body.connect(gain);
+    gain.gain.setValueAtTime(0.5, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.18);
+    noise.start(when); noise.stop(when + 0.2);
+    body.start(when);  body.stop(when + 0.12);
   } else {
-    // hi-hat: short high-freq square burst
-    const hh = ac.createOscillator();
-    hh.connect(gain);
-    hh.type = "square";
-    hh.frequency.value = 8000;
-    gain.gain.setValueAtTime(0.05, when);
+    // hi-hat: high-passed noise burst, very short decay.
+    const noise = noiseBurst(ac, 0.06);
+    const hp = ac.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 7000;
+    noise.connect(hp);
+    hp.connect(gain);
+    gain.gain.setValueAtTime(0.22, when);
     gain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
-    hh.start(when);
-    hh.stop(when + 0.05);
+    noise.start(when); noise.stop(when + 0.06);
   }
 }
 
@@ -239,10 +265,11 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const [status, setStatus]       = useState<State>("idle");
   const [progress, setProgress]   = useState(0);
   const [exporting, setExporting] = useState(false);
-  // Drums permanently muted — kept in the data model for compatibility with old
-  // chiptune jobs, but the noise-style hits don't add anything musical to the mix.
+  // All channels audible by default; each has a mute toggle below. (Drums used
+  // to be force-muted when their synthesis was a buzzy sawtooth — now they're
+  // proper kick/snare/hi-hat hits, so they're on.)
   const [muted, setMuted]         = useState<Record<string, boolean>>({
-    melody: false, harmony: false, bass: false, drums: true,
+    melody: false, harmony: false, bass: false, drums: false,
   });
 
   const acRef        = useRef<AudioContext | null>(null);
@@ -434,8 +461,9 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     "melody",
     ...(data.tracks.harmony ? ["harmony"] : []),
     "bass",
+    ...(data.tracks.drums?.patterns?.length ? ["drums"] : []),
   ];
-  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", bass: "Bass" };
+  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", bass: "Bass", drums: "Drums" };
 
   return (
     <div className="bg-card border border-theme rounded-xl p-4 space-y-3">
