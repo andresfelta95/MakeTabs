@@ -48,13 +48,18 @@ from app.services.songsterr_to_chiptune import build_chiptune_data
 
 logger = logging.getLogger(__name__)
 
-_BEATS_PER_MEASURE = 16
+# 32nd-note grid (8 slots per quarter → 32 per 4/4 measure). The previous
+# 16th-note grid collapsed any note faster than a 16th — fast vocal runs,
+# ornaments and busy guitar/piano lines lost detail. The frontend reads the
+# matching `slots_per_measure` stamped into chiptune_data, so older 16-grid
+# jobs keep playing correctly.
+_SLOTS_PER_QUARTER = 8
 _MEASURES_PER_SECTION = 4
 _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "2.5.0"  # 2.5.0: rhythm track owns harmony bed (lead demoted); solos featured in instrumental runs
+CURRENT_ALGORITHM = "2.6.0"  # 2.6.0: 32nd-note grid + looser onset/frame thresholds — captures faster passages
 
 
 # ── Path A: Songsterr ─────────────────────────────────────────────────────────
@@ -184,12 +189,17 @@ def _transcribe_tonal(
     from basic_pitch.inference import predict
     from basic_pitch import ICASSP_2022_MODEL_PATH
 
+    # Thresholds loosened from (0.35, 0.25, 50ms): soft/legato notes — common in
+    # sung melodies and sustained guitar/piano — weren't triggering a fresh onset
+    # and got merged or skipped. Lower thresholds + shorter minimum length recover
+    # them; the finer 32nd-note grid gives the extra notes distinct slots to land
+    # in rather than collapsing onto their neighbours.
     _, _, note_events = predict(
         audio_path,
         ICASSP_2022_MODEL_PATH,
-        onset_threshold=0.35,
-        frame_threshold=0.25,
-        minimum_note_length=50,
+        onset_threshold=0.28,
+        frame_threshold=0.20,
+        minimum_note_length=40,
         minimum_frequency=min_freq,
         maximum_frequency=max_freq,
     )
@@ -209,7 +219,9 @@ def _transcribe_tonal(
             continue
 
         m_idx, beat = grid.slot(start_s)
-        dur_beats = max(0.5, min(8.0, grid.duration_slots(start_s, end_s)))
+        # Cap at 16 slots (= 2 quarter notes on the 32nd-note grid); floor at
+        # half a slot so a note is never zero-length.
+        dur_beats = max(0.5, min(16.0, grid.duration_slots(start_s, end_s)))
 
         key = (m_idx, beat)
         if key not in slots:
@@ -341,7 +353,7 @@ def _run_chiptune_sync(
 
             on_step("analyzing")
             from app.services.beat_grid import build_beat_grid
-            grid = build_beat_grid(audio, duration_ms)
+            grid = build_beat_grid(audio, duration_ms, slots_per_quarter=_SLOTS_PER_QUARTER)
 
             on_step("transcribing")
             # Melody comes from the vocals — that's the line people recognize
@@ -387,6 +399,7 @@ def _run_chiptune_sync(
             chiptune_data = {
                 "bpm": round(grid.bpm, 1),
                 "source": "ml",
+                "slots_per_measure": grid.slots_per_measure,
                 "tracks": {
                     "melody":  {"waveform": "square",   "sections": melody_sections},
                     "harmony": {"waveform": "sawtooth", "sections": harmony_sections},

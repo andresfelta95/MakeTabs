@@ -19,15 +19,28 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 _BEATS_PER_MEASURE_QUARTERS = 4   # 4/4 assumed
-_SLOTS_PER_QUARTER = 4            # 16 display slots per measure
-_SLOTS_PER_MEASURE = _BEATS_PER_MEASURE_QUARTERS * _SLOTS_PER_QUARTER
+_DEFAULT_SLOTS_PER_QUARTER = 4    # 16 slots per measure (16th-note grid) — tab path
 
 
 class BeatGrid:
-    """Maps absolute times to (measure, slot) using detected beat positions."""
+    """Maps absolute times to (measure, slot) using detected beat positions.
 
-    def __init__(self, beat_times: np.ndarray, duration_s: float):
+    `slots_per_quarter` sets the quantization resolution: 4 → 16th-note grid
+    (16 slots/measure, used by the tab path), 8 → 32nd-note grid (32 slots,
+    used by the chiptune path so fast vocal/guitar passages aren't collapsed).
+    Callers that emit slot-based data must stamp `slots_per_measure` so the
+    frontend divides each measure by the matching number.
+    """
+
+    def __init__(
+        self,
+        beat_times: np.ndarray,
+        duration_s: float,
+        slots_per_quarter: int = _DEFAULT_SLOTS_PER_QUARTER,
+    ):
         self.beat_times = np.asarray(beat_times, dtype=float)
+        self.slots_per_quarter = slots_per_quarter
+        self.slots_per_measure = _BEATS_PER_MEASURE_QUARTERS * slots_per_quarter
         intervals = np.diff(self.beat_times)
         # Median interval is robust against the tracker skipping/adding a beat.
         self._interval = float(np.median(intervals)) if len(intervals) > 0 else 0.5
@@ -56,20 +69,27 @@ class BeatGrid:
 
     def slot(self, t: float) -> tuple[int, int]:
         """(measure_idx, slot_in_measure) for an onset time, clamped to range."""
-        global_slot = int(round(self._fractional_beat(t) * _SLOTS_PER_QUARTER))
-        global_slot = max(0, min(global_slot, self.total_measures * _SLOTS_PER_MEASURE - 1))
-        return global_slot // _SLOTS_PER_MEASURE, global_slot % _SLOTS_PER_MEASURE
+        global_slot = int(round(self._fractional_beat(t) * self.slots_per_quarter))
+        global_slot = max(0, min(global_slot, self.total_measures * self.slots_per_measure - 1))
+        return global_slot // self.slots_per_measure, global_slot % self.slots_per_measure
 
     def duration_slots(self, start_s: float, end_s: float) -> float:
         """Note length in slot units, beat-relative (tempo drift cancelled)."""
-        return (self._fractional_beat(end_s) - self._fractional_beat(start_s)) * _SLOTS_PER_QUARTER
+        return (self._fractional_beat(end_s) - self._fractional_beat(start_s)) * self.slots_per_quarter
 
 
-def build_beat_grid(audio_path: str, duration_ms: int) -> BeatGrid:
+def build_beat_grid(
+    audio_path: str,
+    duration_ms: int,
+    slots_per_quarter: int = _DEFAULT_SLOTS_PER_QUARTER,
+) -> BeatGrid:
     """Track beats on the full mix and return a BeatGrid.
 
     Falls back to a constant grid from the median frame tempo when the tracker
     finds too few beats (e.g. ambient tracks with no percussion).
+
+    `slots_per_quarter` controls quantization resolution (4 → 16th notes,
+    8 → 32nd notes). See BeatGrid.
     """
     import librosa
 
@@ -86,6 +106,9 @@ def build_beat_grid(audio_path: str, duration_ms: int) -> BeatGrid:
         logger.info("Beat tracking sparse (%d beats) — constant grid at %.1f BPM", len(beat_times), bpm)
         beat_times = np.arange(0.0, max(duration_s, len(y) / sr), 60.0 / bpm)
 
-    grid = BeatGrid(beat_times, duration_s)
-    logger.info("Beat grid: %d beats, %.1f BPM, %d measures", len(beat_times), grid.bpm, grid.total_measures)
+    grid = BeatGrid(beat_times, duration_s, slots_per_quarter=slots_per_quarter)
+    logger.info(
+        "Beat grid: %d beats, %.1f BPM, %d measures, %d slots/measure",
+        len(beat_times), grid.bpm, grid.total_measures, grid.slots_per_measure,
+    )
     return grid

@@ -82,7 +82,8 @@ def get_audio_chroma(artist, title):
 
 def chiptune_notes(data):
     """{channel: [(t_seconds, dur_seconds, pitch_class)]} from chiptune_data."""
-    slot_dur = (60.0 / data["bpm"]) / 4.0
+    spm = data.get("slots_per_measure", 16)  # slots per measure (16 on old jobs)
+    slot_dur = (60.0 / data["bpm"]) / (spm / 4.0)
     out = {}
     for chan in ("melody", "harmony", "bass"):
         notes = []
@@ -91,7 +92,7 @@ def chiptune_notes(data):
         for sec in secs:
             for m in sec["measures"]:
                 for n in m["notes"]:
-                    slot = g_measure * 16 + n["beat"]
+                    slot = g_measure * spm + n["beat"]
                     notes.append((slot * slot_dur, n.get("dur", 1.0) * slot_dur, n["pitch"] % 12))
                 g_measure += 1
         out[chan] = notes

@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { ChiptuneData, ChiptuneTonalTrack, DrumEvent } from "../types";
 
-const BEATS_PER_MEASURE = 16;
+// Fallback for chiptune jobs generated before slots_per_measure was stamped
+// into the data — those used a 16th-note (16 slots/measure) grid.
+const DEFAULT_BEATS_PER_MEASURE = 16;
 const SCHEDULE_AHEAD = 0.4;
 const TICK_MS = 120;
 
@@ -21,10 +23,11 @@ interface ScheduledDrum {
 function buildTonalTimeline(
   track: ChiptuneTonalTrack,
   bpm: number,
+  beatsPerMeasure: number,
 ): ScheduledNote[] {
   const quarterDur = 60 / Math.max(bpm, 20);
   const measureDur = 4 * quarterDur;
-  const beatDur = measureDur / BEATS_PER_MEASURE;
+  const beatDur = measureDur / beatsPerMeasure;
   const osc = track.waveform as OscillatorType;
   const gainLevel = osc === "triangle" ? 0.32 : osc === "sawtooth" ? 0.12 : 0.22;
 
@@ -53,10 +56,11 @@ function buildTonalTimeline(
 function buildDrumTimeline(
   patterns: DrumEvent[],
   bpm: number,
+  beatsPerMeasure: number,
 ): ScheduledDrum[] {
   const quarterDur = 60 / Math.max(bpm, 20);
   const measureDur = 4 * quarterDur;
-  const beatDur = measureDur / BEATS_PER_MEASURE;
+  const beatDur = measureDur / beatsPerMeasure;
 
   return patterns
     .map(p => ({ time: p.measure * measureDur + p.beat * beatDur, type: p.type }))
@@ -253,10 +257,11 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const dIdxRef      = useRef(0); // drums index
 
   const { melody, harmony, bass, drums, total } = useMemo(() => {
-    const m = buildTonalTimeline(data.tracks.melody, data.bpm);
-    const h = data.tracks.harmony ? buildTonalTimeline(data.tracks.harmony, data.bpm) : [];
-    const b = buildTonalTimeline(data.tracks.bass, data.bpm);
-    const d = buildDrumTimeline(data.tracks.drums.patterns, data.bpm);
+    const bpm_slots = data.slots_per_measure ?? DEFAULT_BEATS_PER_MEASURE;
+    const m = buildTonalTimeline(data.tracks.melody, data.bpm, bpm_slots);
+    const h = data.tracks.harmony ? buildTonalTimeline(data.tracks.harmony, data.bpm, bpm_slots) : [];
+    const b = buildTonalTimeline(data.tracks.bass, data.bpm, bpm_slots);
+    const d = buildDrumTimeline(data.tracks.drums.patterns, data.bpm, bpm_slots);
     const all = [...m.map(n => n.time), ...h.map(n => n.time), ...b.map(n => n.time), ...d.map(n => n.time)];
     const t = all.length > 0 ? Math.max(...all) + 2 : 30;
     return { melody: m, harmony: h, bass: b, drums: d, total: t };

@@ -146,6 +146,9 @@ export interface ChiptuneDrumTrack {
 
 export interface ChiptuneData {
   bpm: number;
+  /** Slots per measure the note `beat` values are quantized to. Newer jobs use
+   *  32 (32nd-note grid); absent on older jobs, which used 16. */
+  slots_per_measure?: number;
   tracks: {
     melody: ChiptuneTonalTrack;
     harmony?: ChiptuneTonalTrack;

@@ -41,7 +41,10 @@ from app.services.songsterr_to_tab import (
 
 logger = logging.getLogger(__name__)
 
-_BEATS_PER_MEASURE = 16
+# 32 slots per measure (32nd-note grid) — matches the ML chiptune path so both
+# sources resolve fast passages. The value is stamped into chiptune_data as
+# `slots_per_measure`; older 16-grid jobs keep playing via the frontend default.
+_BEATS_PER_MEASURE = 32
 _MEASURES_PER_SECTION = 4
 
 # GM percussion note → chiptune drum type. Unlisted notes are dropped.
@@ -176,10 +179,11 @@ def _tracks_to_grid(
             slot = round(t / slot_dur)
             if not (0 <= slot < total_slots):
                 continue
-            # Cap at 3 beats — long enough for tied vocal sustains to read as
-            # held, short enough that they don't drone (the player decays
-            # them, but stacked 4+ second tones still wash the mix out).
-            dur = max(0.5, min(12.0, dur_s / slot_dur))
+            # Cap at 3 beats (24 slots on the 32nd-note grid) — long enough for
+            # tied vocal sustains to read as held, short enough that they don't
+            # drone (the player decays them, but stacked 4+ second tones still
+            # wash the mix out).
+            dur = max(0.5, min(24.0, dur_s / slot_dur))
             grid.setdefault(slot, []).append((pitch, dur))
     return grid
 
@@ -279,7 +283,7 @@ def _feature_instrumental_runs(
 # Harmony channel limits — keeps the mix from turning into a wall of sawtooth.
 _HARMONY_MAX_VOICES = 2     # real chip music rarely block-chords more than 2 extra voices
 _HARMONY_MIN_PITCH = 48     # below C3 the bass channel already covers it (mud otherwise)
-_HARMONY_MIN_GAP_SLOTS = 2  # same pitch re-struck faster than an 8th note → sustain, don't re-hit
+_HARMONY_MIN_GAP_SLOTS = 4  # same pitch re-struck faster than an 8th note → sustain, don't re-hit (4 slots = 8th on the 32nd grid)
 
 
 def _grid_to_sections(
@@ -321,7 +325,7 @@ def _grid_to_sections(
                     emitted = last_note.get(pitch)
                     if emitted is not None:
                         e_slot, e_note = emitted
-                        e_note["dur"] = round(min(12.0, max(e_note["dur"], slot + dur - e_slot)), 2)
+                        e_note["dur"] = round(min(24.0, max(e_note["dur"], slot + dur - e_slot)), 2)
                     continue
                 distinct[pitch] = max(dur, float(_HARMONY_MIN_GAP_SLOTS))
                 if len(distinct) >= _HARMONY_MAX_VOICES:
@@ -469,7 +473,7 @@ def build_chiptune_data(
         key=lambda d: len(d.get("measures") or []),
     )
     bpm = _dominant_bpm(ref_json)
-    slot_dur = (60.0 / bpm) / 4.0  # 16 slots per 4-quarter measure
+    slot_dur = (60.0 / bpm) / 8.0  # 32 slots per 4-quarter measure (32nd notes)
     starts, quarter_s = _measure_times(ref_json)
     total_s = starts[-1]
     total_measures = max(1, math.ceil(total_s / (slot_dur * _BEATS_PER_MEASURE)))
@@ -512,6 +516,7 @@ def build_chiptune_data(
     return {
         "bpm": round(bpm, 1),
         "source": "songsterr",
+        "slots_per_measure": _BEATS_PER_MEASURE,
         "tracks": {
             "melody":  {"waveform": "square",   "sections": melody_sections},
             "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
