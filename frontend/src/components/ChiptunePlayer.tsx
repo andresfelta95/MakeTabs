@@ -53,7 +53,7 @@ function buildTonalTimeline(
   const gainLevel =
     osc === "triangle" ? 0.32 :
     osc === "sawtooth" ? 0.17 :
-    osc === "pulse"    ? 0.27 :  // lead boosted so the sparse solo cuts through the much busier rhythm bed
+    osc === "pulse"    ? 0.20 :  // lead (opt-in via toggle): present but moderate
     0.22;
 
   const notes: ScheduledNote[] = [];
@@ -292,11 +292,11 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
   const [status, setStatus]       = useState<State>("idle");
   const [progress, setProgress]   = useState(0);
   const [exporting, setExporting] = useState(false);
-  // All channels audible by default; each has a mute toggle below. (Drums used
-  // to be force-muted when their synthesis was a buzzy sawtooth — now they're
-  // proper kick/snare/hi-hat hits, so they're on.)
+  // Default to the original, recognizable mix: melody + harmony + bass only.
+  // Drums and the lead voice are OPT-IN via their toggles — added all at once
+  // they unbalance the mix, so they start muted and the user enables them.
   const [muted, setMuted]         = useState<Record<string, boolean>>({
-    melody: false, harmony: false, lead: false, bass: false, drums: false,
+    melody: false, harmony: false, lead: true, bass: false, drums: true,
   });
 
   const acRef        = useRef<AudioContext | null>(null);
