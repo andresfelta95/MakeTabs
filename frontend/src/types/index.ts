@@ -149,6 +149,9 @@ export interface ChiptuneData {
   tracks: {
     melody: ChiptuneTonalTrack;
     harmony?: ChiptuneTonalTrack;
+    /** Dedicated solo/lead voice (lead guitar). Absent on jobs generated before
+     *  the solo voice existed. */
+    lead?: ChiptuneTonalTrack;
     bass: ChiptuneTonalTrack;
     drums: ChiptuneDrumTrack;
   };

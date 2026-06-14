@@ -359,6 +359,40 @@ def _grid_to_sections(
     return sections
 
 
+# Minimum notes for the dedicated solo voice to be worth adding (below this the
+# lead track is really all rhythm chords — skip the voice rather than add noise).
+_LEAD_MIN_NOTES = 8
+
+
+def _solo_line_sections(
+    grid: dict[int, list[tuple[int, float]]],
+    total_measures: int,
+) -> list[dict]:
+    """Sections for the dedicated SOLO voice: the single-note line of the lead
+    track. Chord slots (>=2 notes) are skipped — a lead track plays power chords
+    in the verses and the actual solo only in the solo section, so keeping only
+    mono slots gives the solo and leaves the voice quiet during rhythm. This is
+    additive: it does not touch melody/harmony/bass."""
+    notes_by_measure: list[list[dict]] = [[] for _ in range(total_measures)]
+    for slot in sorted(grid.keys()):
+        candidates = grid[slot]
+        if len(candidates) != 1:
+            continue
+        pitch, dur = candidates[0]
+        m_idx, beat = slot // _BEATS_PER_MEASURE, slot % _BEATS_PER_MEASURE
+        notes_by_measure[m_idx].append({"pitch": pitch, "beat": beat, "dur": round(dur, 2)})
+    sections = []
+    for i in range(0, total_measures, _MEASURES_PER_SECTION):
+        chunk = notes_by_measure[i: i + _MEASURES_PER_SECTION]
+        sections.append({
+            "name": f"Section {len(sections) + 1}",
+            "measures": [{"notes": m} for m in chunk],
+        })
+    if not sections:
+        sections = [{"name": "Section 1", "measures": [{"notes": []}]}]
+    return sections
+
+
 def _drums_to_patterns(
     track_json: dict,
     slot_dur: float,
@@ -500,22 +534,43 @@ def build_chiptune_data(
         total_measures, "bass")
     drum_patterns = _drums_to_patterns(drums[1], slot_dur, total_slots, starts, quarter_s) if drums else []
 
+    # Dedicated SOLO voice — ADDITIVE ONLY. melody/harmony/bass/drums above are
+    # unchanged (the harmony still features the solo during instrumental runs as
+    # before); this just ALSO surfaces the lead/solo guitar's single-note line on
+    # its own voice so the solo is actually heard instead of being buried in the
+    # harmony. Skipped when there's no lead/solo-named track or no real solo line.
+    lead_pair = max(
+        ((t, d) for (t, d) in pitched if t is not melody_pair[0] and _is_lead_guitar(t)),
+        key=lambda p: _note_count(p[1]), default=None,
+    )
+    lead_sections = None
+    if lead_pair is not None:
+        lead_grid = _tracks_to_grid([lead_pair[1]], slot_dur, total_slots, starts, quarter_s)
+        cand = _solo_line_sections(lead_grid, total_measures)
+        if sum(len(m["notes"]) for s in cand for m in s["measures"]) >= _LEAD_MIN_NOTES:
+            lead_sections = cand
+
     logger.info(
-        "Songsterr chiptune: melody=%s harmony=%d tracks bass=%s drums=%s (%.0fs, %d measures @ %.0f BPM)",
+        "Songsterr chiptune: melody=%s harmony=%d tracks bass=%s drums=%s lead=%s (%.0fs, %d measures @ %.0f BPM)",
         melody_pair[0].name,
         len(harmony_jsons),
         bass[0].name if bass else "—",
         drums[0].name if drums else "—",
+        lead_pair[0].name if (lead_pair and lead_sections) else "—",
         total_s, total_measures, bpm,
     )
+
+    tracks_out = {
+        "melody":  {"waveform": "square",   "sections": melody_sections},
+        "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
+        "bass":    {"waveform": "triangle", "sections": bass_sections},
+        "drums":   {"waveform": "noise",    "patterns": drum_patterns},
+    }
+    if lead_sections is not None:
+        tracks_out["lead"] = {"waveform": "pulse", "sections": lead_sections}
 
     return {
         "bpm": round(bpm, 1),
         "source": "songsterr",
-        "tracks": {
-            "melody":  {"waveform": "square",   "sections": melody_sections},
-            "harmony": {"waveform": "sawtooth", "sections": harmony_sections},
-            "bass":    {"waveform": "triangle", "sections": bass_sections},
-            "drums":   {"waveform": "noise",    "patterns": drum_patterns},
-        },
+        "tracks": tracks_out,
     }

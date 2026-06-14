@@ -54,7 +54,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "2.5.0"  # 2.5.0: rhythm track owns harmony bed (lead demoted); solos featured in instrumental runs
+CURRENT_ALGORITHM = "2.5.1"  # 2.5.1: ADD-ONLY dedicated solo voice (Songsterr lead guitar) — melody/harmony/bass unchanged
 
 
 # ── Path A: Songsterr ─────────────────────────────────────────────────────────
