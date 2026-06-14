@@ -59,7 +59,7 @@ _MIN_VELOCITY = 20
 
 _pipeline_lock = threading.Lock()
 
-CURRENT_ALGORITHM = "2.7.0"  # 2.7.0: dedicated lead channel (solo guitar / piano) alongside rhythm harmony
+CURRENT_ALGORITHM = "2.8.0"  # 2.8.0: lead channel plays solo-only (drops rhythm chord-tops); unnamed-solo fallback
 
 
 # ── Path A: Songsterr ─────────────────────────────────────────────────────────
