@@ -312,6 +312,14 @@ def _grid_to_sections(
             chosen = [max(candidates)]                      # highest pitch = lead line
         elif mode == "bass":
             chosen = [min(candidates)]                      # lowest pitch
+        elif mode == "lead":
+            # Solo channel: keep ONLY genuine single-note slots. A lead-distortion
+            # track usually plays power chords in the verses and the real solo
+            # only in the solo section; taking chord-tops here just doubles the
+            # rhythm ("the solo only has the rhythmic part"). Chord slots (>=2
+            # notes) are dropped so the channel carries the actual solo line and
+            # stays quiet while the lead track is strumming rhythm.
+            chosen = [max(candidates)] if len(candidates) == 1 else []
         else:  # harmony: a few distinct pitches, highest first, thinned
             distinct: dict[int, float] = {}
             for pitch, dur in sorted(candidates, reverse=True):
@@ -421,6 +429,11 @@ def _is_keys(track: SongsterrTrack) -> bool:
 _LEAD_MIN_NOTES = 15
 _LEAD_MAX_BED_FRAC = 0.7
 
+# After the solo-only (single-note) extraction, a lead with fewer than this many
+# notes is treated as "no real solo" — the track was mostly rhythm chords — and
+# the channel is dropped in favour of the old solo-in-harmony featuring.
+_LEAD_MIN_KEPT = 8
+
 
 def _pick_lead(
     pitched: list[tuple[SongsterrTrack, dict]],
@@ -514,14 +527,11 @@ def build_chiptune_data(
     harmony_pairs = [(t, d) for (t, d) in pitched if t is not melody_pair[0]]
     harmony_pairs.sort(key=lambda p: (_is_lead_guitar(p[0]), -_note_count(p[1])))
 
-    # Dedicated lead/counter-melody channel: the solo guitar (or piano) plays on
-    # its own voice, including under the vocals where the single harmony channel
-    # can't carry it. Exclude it from the harmony fill so it isn't doubled.
+    # Dedicated lead/counter-melody channel: the solo guitar (or piano) gets its
+    # own voice. Whether it's excluded from the harmony fill is decided below,
+    # once we know it carries a real solo line (see the lead block).
     bed_track = harmony_pairs[0][0] if harmony_pairs else None
     lead_pair = _pick_lead(pitched, melody_pair[0], bed_track)
-    if lead_pair is not None:
-        harmony_pairs = [p for p in harmony_pairs if p[0] is not lead_pair[0]]
-    harmony_jsons = [d for _, d in harmony_pairs]
 
     # Timing reference: the track with the most measures AND tempo automations
     # (maps are usually identical, but some track JSONs omit them).
@@ -548,22 +558,31 @@ def build_chiptune_data(
     melody_grid = _grid_with_measure_fill(
         [melody_pair[1], *melody_fill_jsons], slot_dur, total_slots, starts, quarter_s)
     melody_sections = _grid_to_sections(melody_grid, total_measures, "melody")
+    melody_measures = {slot // _BEATS_PER_MEASURE for slot in melody_grid}
+
+    # Lead channel — solo line ONLY ("lead" mode keeps single-note slots and
+    # drops chord-tops, which would just double the rhythm). Build it first: if
+    # the chosen track turns out to be mostly power chords (few solo notes), drop
+    # the channel and fall back to surfacing the solo inside the harmony.
+    lead_sections = None
+    if lead_pair is not None:
+        lead_grid = _tracks_to_grid([lead_pair[1]], slot_dur, total_slots, starts, quarter_s)
+        cand = _grid_to_sections(lead_grid, total_measures, "lead")
+        if sum(len(m["notes"]) for s in cand for m in s["measures"]) >= _LEAD_MIN_KEPT:
+            lead_sections = cand
+
+    # Harmony bed. A surviving lead is excluded from the fill so it isn't
+    # doubled; otherwise the lead track stays in the fill and the solo is
+    # featured during instrumental runs (pre-lead-channel behaviour).
+    if lead_sections is not None:
+        harmony_pairs = [p for p in harmony_pairs if p[0] is not lead_pair[0]]
+    harmony_jsons = [d for _, d in harmony_pairs]
     harmony_grids = [
         _tracks_to_grid([d], slot_dur, total_slots, starts, quarter_s)
         for d in harmony_jsons
     ]
     harmony_grid = _fill_grids(harmony_grids)
-    melody_measures = {slot // _BEATS_PER_MEASURE for slot in melody_grid}
-
-    # Lead channel — a single top line from the solo/piano track, over ALL
-    # measures (it's its own voice now, not a fill). When we have one, the
-    # harmony stays a pure rhythm bed; otherwise fall back to the old behaviour
-    # of surfacing the solo inside the harmony during instrumental runs.
-    lead_sections = None
-    if lead_pair is not None:
-        lead_grid = _tracks_to_grid([lead_pair[1]], slot_dur, total_slots, starts, quarter_s)
-        lead_sections = _grid_to_sections(lead_grid, total_measures, "melody")
-    else:
+    if lead_sections is None:
         lead_flags = [_is_lead_guitar(t) for t, _ in harmony_pairs]
         _feature_instrumental_runs(harmony_grid, harmony_grids, lead_flags, melody_measures, total_measures)
     harmony_sections = _grid_to_sections(harmony_grid, total_measures, "harmony")
