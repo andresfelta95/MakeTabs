@@ -53,7 +53,7 @@ function buildTonalTimeline(
   const gainLevel =
     osc === "triangle" ? 0.32 :
     osc === "sawtooth" ? 0.17 :
-    osc === "pulse"    ? 0.19 :
+    osc === "pulse"    ? 0.21 :  // lead just under melody: solo reads over the rhythm, vocal tune still leads
     0.22;
 
   const notes: ScheduledNote[] = [];

@@ -414,6 +414,14 @@ def _is_keys(track: SongsterrTrack) -> bool:
     return bool(_KEYS_RE.search(f"{track.name} {track.instrument}"))
 
 
+# A counter-melody candidate must have at least this many notes (so we don't put
+# stray fills on the channel) and stay under this fraction of the rhythm bed's
+# note count (so a SECOND rhythm guitar — roughly as dense as the bed — is never
+# mistaken for a lead line and doesn't just thicken the rhythm).
+_LEAD_MIN_NOTES = 15
+_LEAD_MAX_BED_FRAC = 0.7
+
+
 def _pick_lead(
     pitched: list[tuple[SongsterrTrack, dict]],
     melody_track: SongsterrTrack,
@@ -422,9 +430,10 @@ def _pick_lead(
     """Choose the source for the dedicated lead/counter-melody channel.
 
     Priority: a lead/solo-named guitar (the actual solo line), then a keyboard
-    track (piano), then nothing — we don't force a third rhythm guitar onto the
-    channel, which would just thicken the bed. Never the melody or harmony-bed
-    track. Returns None when there's no good candidate."""
+    track (piano), then — for songs whose solo isn't explicitly named "lead" —
+    the densest clearly-secondary guitar (lighter than the rhythm bed). Never
+    the melody, the harmony bed, or a co-equal rhythm guitar. Returns None when
+    there's no good candidate."""
     cands = [
         (t, d) for (t, d) in pitched
         if t is not melody_track and t is not bed_track and _note_count(d) > 0
@@ -435,6 +444,15 @@ def _pick_lead(
     keys = [(t, d) for (t, d) in cands if _is_keys(t)]
     if keys:
         return max(keys, key=lambda p: _note_count(p[1]))
+    # Counter-melody fallback: a secondary guitar carrying the solo/lead lines.
+    bed_notes = next((_note_count(d) for (t, d) in pitched if t is bed_track), 0)
+    secondary = [
+        (t, d) for (t, d) in cands
+        if _note_count(d) >= _LEAD_MIN_NOTES
+        and (bed_notes == 0 or _note_count(d) <= _LEAD_MAX_BED_FRAC * bed_notes)
+    ]
+    if secondary:
+        return max(secondary, key=lambda p: _note_count(p[1]))
     return None
 
 
