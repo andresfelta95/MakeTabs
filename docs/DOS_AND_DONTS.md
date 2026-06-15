@@ -55,12 +55,20 @@ chiptune pipeline or deploying.
 
 ## Chiptune model facts (so you don't relearn them)
 
-- chiptune_data has 3 tonal channels + drums: `melody` (square, = vocals),
-  `harmony` (sawtooth, = rhythm guitar), `bass` (triangle), `drums` (noise).
-- With vocals present there is **no spare channel** for a lead-guitar solo or
-  piano: during sung sections all three tonal voices are occupied. The original
-  pipeline folds an instrumental-section solo *into* the harmony channel, where
-  it tends to get buried under the rhythm.
+- chiptune_data tonal channels + drums: `melody` (square, = vocals),
+  `harmony` (sawtooth, = rhythm guitar), `bass` (triangle), `drums` (noise),
+  and an **optional `lead`** (pulse, = lead-guitar solo) — see below.
+- The harmony channel also folds an instrumental-section solo *into* itself
+  (`_feature_instrumental_runs`), where it tends to get buried under the rhythm.
+- `lead` / solo voice (added 2026-06-15, algo `2.5.1`): an **add-only** voice
+  carrying the Songsterr lead-guitar's single-note line (`_solo_line_sections`
+  keeps mono slots, drops chord slots so it's the solo not the rhythm). It does
+  NOT modify melody/harmony/bass — they're computed by the original code and the
+  solo is appended. Only emitted when there's a lead-named track with ≥8 solo
+  notes. Player plays it on a 25%-duty pulse with a "Solo" mute toggle, on by
+  default. ML path does NOT produce a lead (one mixed guitar stem can't be split).
+  **This is the model for how to change this pipeline:** one isolated, additive,
+  reversible change, deployed and listened to on its own.
 - Songsterr path is tried first (human-transcribed); ML (Demucs + basic-pitch)
   is the fallback. Demucs gives ONE mixed guitar stem — you cannot split lead
   from rhythm within it.
