@@ -34,6 +34,9 @@ export default function Home() {
 
   const handleSearch = useCallback((q: string) => setSearchQuery(q), []);
 
+  const hasAnything =
+    (history && history.length > 0) || (chiptuneHistory && chiptuneHistory.length > 0);
+
   const handleGenerateTabs = async (spotifyId: string) => {
     setLoadingTrackId(spotifyId);
     try {
@@ -60,13 +63,28 @@ export default function Home() {
 
   return (
     <Layout>
-      {/* Search */}
-      <div className="mb-8">
-        <SearchBar onSearch={handleSearch} />
+      {/* Hero — search is THE action */}
+      <div className={`mx-auto max-w-2xl text-center transition-all ${isSearching ? "mb-6" : "mb-10 pt-6 sm:pt-10"}`}>
+        {!isSearching && (
+          <>
+            <h1 className="font-display text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
+              Any song →{" "}
+              <span className="text-accent">guitar tabs</span>
+              <span className="text-secondary"> & </span>
+              <span className="text-chip">16-bit</span>
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-sm text-secondary sm:text-base">
+              Search a track, pick a format, and the rig does the rest.
+            </p>
+          </>
+        )}
+        <div className={isSearching ? "" : "mt-6"}>
+          <SearchBar onSearch={handleSearch} />
+        </div>
       </div>
 
       {chiptuneError && (
-        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
           {chiptuneError}
         </div>
       )}
@@ -74,11 +92,11 @@ export default function Home() {
       {/* Search results */}
       {isSearching && (
         <section className="mb-10">
-          <SectionHeader icon="🔍" title={`Results for "${searchQuery}"`} />
+          <SectionHeader title={`Results for “${searchQuery}”`} count={tracks.length} />
           {tracks.length === 0 ? (
-            <p className="text-secondary text-sm py-8 text-center">No songs found</p>
+            <p className="py-8 text-center text-sm text-secondary">No songs found</p>
           ) : (
-            <div className="space-y-1 mt-3">
+            <div className="mt-3 space-y-1">
               {tracks.map((track) => (
                 <TrackCard
                   key={track.spotify_id}
@@ -95,30 +113,45 @@ export default function Home() {
         </section>
       )}
 
+      {/* First-run: how it works */}
+      {!isSearching && !historyLoading && !chiptuneHistoryLoading && !hasAnything && (
+        <div className="mx-auto mb-12 grid max-w-3xl gap-3 sm:grid-cols-3">
+          {[
+            ["1", "Search", "Find any song on Spotify — title or artist."],
+            ["2", "Pick a format", "🎸 Tabs transcribes the guitar. 🕹️ 16-bit remakes it as a chiptune."],
+            ["3", "Play along", "Follow the tab with synced playback, or vibe to the 16-bit mix."],
+          ].map(([n, title, body]) => (
+            <div key={n} className="rounded-xl border border-theme bg-card p-4 text-left">
+              <div className="font-display text-3xl font-extrabold text-accent/60">{n}</div>
+              <p className="mt-1 font-semibold text-primary">{title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-secondary">{body}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* My Tabs + 16-bit library */}
       {!isSearching && (
         <>
         <section>
-          <SectionHeader icon="🎸" title="My Tabs" />
+          <SectionHeader
+            title="My Tabs"
+            count={history?.length}
+            hint="Guitar transcriptions, ready to play along"
+          />
 
-          {historyLoading && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="rounded-xl bg-card animate-pulse aspect-[3/4]" />
-              ))}
-            </div>
-          )}
+          {historyLoading && <SkeletonGrid />}
 
           {!historyLoading && (!history || history.length === 0) && (
-            <div className="text-center py-16">
-              <div className="text-5xl mb-4">🎵</div>
-              <p className="text-primary font-semibold mb-1">No tabs yet</p>
-              <p className="text-secondary text-sm">Search for a song above to generate your first tab</p>
+            <div className="py-12 text-center">
+              <div className="mb-3 text-4xl">🎸</div>
+              <p className="mb-1 font-semibold text-primary">No tabs yet</p>
+              <p className="text-sm text-secondary">Search a song above and hit “Tabs”</p>
             </div>
           )}
 
           {!historyLoading && history && history.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {history.map((job) => (
                 <TabCard key={job.job_id} job={job} />
               ))}
@@ -127,27 +160,26 @@ export default function Home() {
         </section>
 
         {/* My 16-bit library */}
-        <section className="mt-10">
-          <SectionHeader icon="🎮" title="My 16-bit" />
+        <section className="mt-12">
+          <SectionHeader
+            title="My 16-bit"
+            count={chiptuneHistory?.length}
+            hint="Chiptune remakes — arcade-cab energy"
+            variant="chip"
+          />
 
-          {chiptuneHistoryLoading && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="rounded-xl bg-card animate-pulse aspect-[3/4]" />
-              ))}
-            </div>
-          )}
+          {chiptuneHistoryLoading && <SkeletonGrid />}
 
           {!chiptuneHistoryLoading && (!chiptuneHistory || chiptuneHistory.length === 0) && (
-            <div className="text-center py-10">
-              <div className="text-4xl mb-3">🎮</div>
-              <p className="text-primary font-semibold mb-1">No 16-bit songs yet</p>
-              <p className="text-secondary text-sm">Search for a song and hit the 16-bit button</p>
+            <div className="py-10 text-center">
+              <div className="mb-3 text-4xl">🕹️</div>
+              <p className="mb-1 font-semibold text-primary">No 16-bit songs yet</p>
+              <p className="text-sm text-secondary">Search a song above and hit “16-bit”</p>
             </div>
           )}
 
           {!chiptuneHistoryLoading && chiptuneHistory && chiptuneHistory.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {chiptuneHistory.map((job) => (
                 <ChiptuneCard key={job.job_id} job={job} />
               ))}
@@ -160,11 +192,35 @@ export default function Home() {
   );
 }
 
-function SectionHeader({ icon, title }: { icon: string; title: string }) {
+function SectionHeader({
+  title, count, hint, variant = "amber",
+}: {
+  title: string; count?: number; hint?: string; variant?: "amber" | "chip";
+}) {
   return (
-    <div className="flex items-center gap-2 mb-1">
-      <span className="text-lg">{icon}</span>
-      <h2 className="text-base font-bold text-primary tracking-tight">{title}</h2>
+    <div className="mb-1">
+      <div className="flex items-baseline gap-2.5">
+        <h2 className="font-display text-2xl font-bold tracking-tight text-primary">{title}</h2>
+        {typeof count === "number" && count > 0 && (
+          <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold ${
+            variant === "chip" ? "bg-chip/15 text-chip" : "bg-accent-soft text-accent"
+          }`}>
+            {count}
+          </span>
+        )}
+      </div>
+      {hint && <p className="mt-0.5 text-xs text-secondary">{hint}</p>}
+      <div className={`mt-2 h-0.5 w-10 rounded-full ${variant === "chip" ? "bg-chip/60" : "bg-accent/60"}`} />
+    </div>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="aspect-[3/4] animate-pulse rounded-xl bg-card" />
+      ))}
     </div>
   );
 }

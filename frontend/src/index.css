@@ -2,32 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Backstage amp-rig ────────────────────────────────────────────────────
+   Warm tube-amber glow on stage-black. Light mode is warm paper in daylight.
+   Same token names as before so every component re-themes automatically. */
+
 @layer base {
   :root {
-    --bg-base:     #F5F5F5;
-    --bg-elevated: #FFFFFF;
-    --bg-card:     #FFFFFF;
-    --bg-hover:    #F0F0F0;
-    --text-primary:   #0d0d0d;
-    --text-secondary: #6B7280;
-    --border:      rgba(0, 0, 0, 0.08);
+    --bg-base:     #f6f2ea;
+    --bg-elevated: #fdfbf6;
+    --bg-card:     #fffdf9;
+    --bg-hover:    #efe8db;
+    --text-primary:   #1c1712;
+    --text-secondary: #6e6353;
+    --border:      rgba(28, 23, 18, 0.1);
+    --accent:      #b45309; /* amber-700 — AA on paper */
+    --on-accent:   #fffdf9;
+    --accent-soft: rgba(180, 83, 9, 0.12);
+    --chip:        #7c5cd6; /* 16-bit violet */
+    --glow:        rgba(217, 119, 6, 0.07);
   }
 
   .dark {
-    --bg-base:     #121212;
-    --bg-elevated: #191414;
-    --bg-card:     #282828;
-    --bg-hover:    #3E3E3E;
-    --text-primary:   #FFFFFF;
-    --text-secondary: #9CA3AF;
-    --border:      rgba(255, 255, 255, 0.08);
+    --bg-base:     #0f0d0a;
+    --bg-elevated: #16120d;
+    --bg-card:     #1c1712;
+    --bg-hover:    #29221a;
+    --text-primary:   #f4eee3;
+    --text-secondary: #a3988a;
+    --border:      rgba(244, 238, 227, 0.09);
+    --accent:      #fbbf24; /* tube-glow amber */
+    --on-accent:   #1c1712;
+    --accent-soft: rgba(251, 191, 36, 0.12);
+    --chip:        #a78bfa;
+    --glow:        rgba(251, 191, 36, 0.06);
   }
 
   body {
     background-color: var(--bg-base);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-family: "Space Grotesk", system-ui, sans-serif;
     transition: background-color 0.2s, color 0.2s;
+  }
+
+  /* Stage light: one warm radial falling from above the header. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(60rem 28rem at 50% -8rem, var(--glow), transparent 70%);
+  }
+  #root { position: relative; z-index: 1; }
+
+  h1, h2, h3, .font-display {
+    font-family: "Bricolage Grotesque", "Space Grotesk", sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -39,4 +83,6 @@
   .text-primary   { color: var(--text-primary); }
   .text-secondary { color: var(--text-secondary); }
   .border-theme   { border-color: var(--border); }
+  .bg-accent-soft { background-color: var(--accent-soft); }
+  .text-on-accent { color: var(--on-accent); }
 }

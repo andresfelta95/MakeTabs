@@ -21,59 +21,60 @@ export default function TrackCard({ track, onGenerateTabs, onGenerateChiptune, i
   const hasCachedTab = tabInfo?.status === "done";
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg
-                    hover:bg-spotify-card dark:hover:bg-spotify-card hover:bg-gray-100
-                    transition-colors group">
+    <div className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5
+                    transition-colors hover:border-theme hover:bg-card">
       {track.image_url ? (
         <img
           src={track.image_url}
           alt={track.album ?? track.title}
-          className="w-10 h-10 rounded-md object-cover flex-shrink-0"
+          className="h-11 w-11 flex-shrink-0 rounded-lg object-cover"
         />
       ) : (
-        <div className="w-10 h-10 rounded-md bg-gray-200 dark:bg-spotify-hover flex-shrink-0" />
+        <div className="h-11 w-11 flex-shrink-0 rounded-lg bg-card-hover" />
       )}
 
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{track.title}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-primary">
+          {track.title}
+          {hasCachedTab && (
+            <span className="ml-1.5 align-middle text-xs text-accent" title="Tab already generated">●</span>
+          )}
+        </p>
+        <p className="truncate text-xs text-secondary">
           {track.artist}{track.album && ` — ${track.album}`}
         </p>
       </div>
 
-      <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">
+      <span className="hidden flex-shrink-0 font-mono text-xs text-secondary sm:block">
         {formatDuration(track.duration_ms)}
       </span>
 
-      {hasCachedTab && (
-        <span className="text-accent text-xs flex-shrink-0" title="Tab available">✓</span>
-      )}
-
-      <div className="flex gap-1.5 flex-shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+      {/* Actions — always visible so nobody has to discover a hover */}
+      <div className="flex flex-shrink-0 gap-1.5">
         <button
           onClick={() => onGenerateTabs(track.spotify_id)}
           disabled={isLoading}
-          className={`px-3 py-1.5 rounded-full text-xs font-semibold
-                     transition-all disabled:opacity-50 disabled:cursor-not-allowed
+          title={hasCachedTab ? "Open the generated tab" : "Transcribe the guitar into tabs"}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all
+                     disabled:cursor-not-allowed disabled:opacity-50
                      ${hasCachedTab
-                       ? "bg-accent text-black hover:scale-105 active:scale-95"
-                       : "border border-accent text-accent hover:bg-accent hover:text-black"
+                       ? "bg-accent text-on-accent hover:scale-105 active:scale-95"
+                       : "border border-accent/60 text-accent hover:bg-accent hover:text-on-accent"
                      }`}
         >
-          {isLoading ? "…" : hasCachedTab ? "View Tab" : "Get Tabs"}
+          {isLoading ? "…" : hasCachedTab ? "▶ View tab" : "🎸 Tabs"}
         </button>
 
         {onGenerateChiptune && (
           <button
             onClick={() => onGenerateChiptune(track.spotify_id)}
             disabled={chiptuneLoading}
-            title="Generate 16-bit chiptune version"
-            className="px-3 py-1.5 rounded-full text-xs font-semibold
-                       border border-purple-400 text-purple-400
-                       hover:bg-purple-400 hover:text-black
-                       transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Remake this song as a 16-bit chiptune"
+            className="rounded-full border border-chip/60 px-3.5 py-1.5 text-xs font-semibold text-chip
+                       transition-all hover:bg-chip hover:text-white
+                       disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {chiptuneLoading ? "…" : "16-bit"}
+            {chiptuneLoading ? "…" : "🕹️ 16-bit"}
           </button>
         )}
       </div>

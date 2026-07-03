@@ -2,12 +2,12 @@ import { loginUrl } from "../api/auth";
 
 export default function Login() {
   return (
-    <div className="min-h-screen bg-base flex items-center justify-center px-6">
-      <div className="w-full max-w-sm text-center space-y-8">
-        {/* Logo */}
-        <div className="space-y-3">
+    <div className="flex min-h-screen items-center justify-center bg-base px-6">
+      <div className="w-full max-w-sm space-y-8 text-center">
+        {/* Brand */}
+        <div className="space-y-4">
           <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/25 bg-accent-soft shadow-[0_0_40px_-8px_var(--accent)]">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-accent">
                 <path d="M9 18V5l12-2v13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="1.5"/>
@@ -16,25 +16,28 @@ export default function Login() {
             </div>
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-primary tracking-tight">MakeTabs</h1>
-            <p className="text-secondary text-sm mt-1">
-              Generate guitar tabs from your Spotify library
+            <h1 className="font-display text-4xl font-extrabold tracking-tight text-primary">
+              Make<span className="text-accent">Tabs</span>
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-secondary">
+              Any song → <span className="text-accent">guitar tabs</span> &{" "}
+              <span className="text-chip">16-bit chiptunes</span>
             </p>
           </div>
         </div>
 
-        {/* CTA */}
+        {/* CTA — Spotify brand green, on purpose */}
         <a
           href={loginUrl}
-          className="flex items-center justify-center gap-3 bg-accent text-black font-semibold
-                     px-8 py-3.5 rounded-full hover:scale-105 active:scale-95 transition-transform
-                     shadow-lg shadow-accent/20"
+          className="flex items-center justify-center gap-3 rounded-full bg-spotify-green px-8 py-3.5
+                     font-semibold text-black shadow-lg shadow-spotify-green/20
+                     transition-transform hover:scale-105 active:scale-95"
         >
           <SpotifyIcon />
           Continue with Spotify
         </a>
 
-        <p className="text-xs text-secondary/60">
+        <p className="text-xs text-secondary/70">
           Your playlists are only used to select songs. No data is shared.
         </p>
       </div>

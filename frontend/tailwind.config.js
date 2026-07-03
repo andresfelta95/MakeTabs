@@ -5,6 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Kept for the Spotify login button only.
         spotify: {
           green: "#1DB954",
           black: "#191414",
@@ -12,7 +13,13 @@ export default {
           card: "#282828",
           hover: "#3E3E3E",
         },
-        accent: "#1DB954",
+        accent: "var(--accent)", // tube-amber (theme-aware)
+        chip: "var(--chip)", // 16-bit violet
+      },
+      fontFamily: {
+        display: ['"Bricolage Grotesque"', '"Space Grotesk"', "sans-serif"],
+        body: ['"Space Grotesk"', "system-ui", "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
       keyframes: {
         eq: {

@@ -13,9 +13,9 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
   }, [value, onSearch]);
 
   return (
-    <div className="relative">
+    <div className="group relative">
       <svg
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary w-4 h-4 pointer-events-none"
+        className="pointer-events-none absolute left-5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-secondary transition-colors group-focus-within:text-accent"
         viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       >
         <circle cx="11" cy="11" r="8" />
@@ -25,15 +25,18 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Search songs, artists..."
-        className="w-full bg-card border border-theme rounded-full pl-11 pr-10 py-3 text-sm
-                   text-primary placeholder:text-secondary
-                   focus:outline-none focus:ring-2 focus:ring-accent/50 transition"
+        placeholder="Search songs, artists…"
+        aria-label="Search songs or artists"
+        className="w-full rounded-2xl border border-theme bg-card py-4 pl-12 pr-11 text-base
+                   text-primary shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-12px_rgba(0,0,0,0.25)]
+                   placeholder:text-secondary transition
+                   focus:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/40"
       />
       {value && (
         <button
           onClick={() => setValue("")}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-secondary hover:text-primary transition-colors"
+          aria-label="Clear search"
+          className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-secondary transition-colors hover:bg-card-hover hover:text-primary"
         >
           ✕
         </button>

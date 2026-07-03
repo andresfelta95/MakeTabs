@@ -536,7 +536,7 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
           onClick={handleDownload}
           disabled={exporting}
           className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
-                     border border-purple-400/40 text-purple-400 hover:bg-purple-400/10
+                     border border-chip/50 text-chip hover:bg-chip/10
                      disabled:opacity-50 disabled:cursor-wait transition-colors"
         >
           {exporting ? (

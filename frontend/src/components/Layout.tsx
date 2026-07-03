@@ -20,27 +20,29 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-base text-primary">
-      <header className="bg-elevated border-b border-theme sticky top-0 z-10 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-10 border-b border-theme bg-elevated/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+          <a href="/" className="flex items-center gap-2" aria-label="MakeTabs home">
             <GuitarPickIcon />
-            <span className="text-lg font-bold text-accent tracking-tight">MakeTabs</span>
-          </div>
+            <span className="font-display text-xl font-extrabold tracking-tight">
+              Make<span className="text-accent">Tabs</span>
+            </span>
+          </a>
 
           <div className="flex items-center gap-4">
             <button
               onClick={toggle}
               aria-label="Toggle theme"
-              className="p-2 rounded-full hover:bg-card-hover transition-colors text-secondary hover:text-primary"
+              className="rounded-full p-2 text-secondary transition-colors hover:bg-card-hover hover:text-primary"
             >
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
             {user && (
               <>
-                <span className="text-sm text-secondary hidden sm:block">{user.display_name}</span>
+                <span className="hidden text-sm text-secondary sm:block">{user.display_name}</span>
                 <button
                   onClick={handleLogout}
-                  className="text-sm text-secondary hover:text-primary transition-colors"
+                  className="rounded-full border border-theme px-3 py-1.5 text-sm text-secondary transition-colors hover:border-accent/40 hover:text-primary"
                 >
                   Log out
                 </button>
@@ -48,8 +50,10 @@ export default function Layout({ children }: LayoutProps) {
             )}
           </div>
         </div>
+        {/* Amp power-line: a hairline of warm glow under the header */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-accent/50 to-transparent" />
       </header>
-      <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
     </div>
   );
 }

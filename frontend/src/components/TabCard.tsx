@@ -18,8 +18,12 @@ export default function TabCard({ job }: TabCardProps) {
   return (
     <div
       onClick={handleClick}
+      role={job.status === "done" ? "button" : undefined}
+      tabIndex={job.status === "done" ? 0 : undefined}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={job.status === "done" ? `Open tab: ${track?.title ?? "song"}` : undefined}
       className={`group relative rounded-xl overflow-hidden bg-card border border-theme
-                  transition-all duration-200 hover:scale-[1.02] hover:shadow-lg
+                  transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:border-accent/40
                   ${job.status === "done" ? "cursor-pointer" : "cursor-default"}`}
     >
       {/* Album art */}
@@ -48,7 +52,7 @@ export default function TabCard({ job }: TabCardProps) {
         {job.status === "done" && (
           <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="w-9 h-9 rounded-full bg-accent flex items-center justify-center shadow-lg">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="black">
+              <svg width="14" height="14" viewBox="0 0 24 24" className="fill-[color:var(--on-accent)]">
                 <polygon points="5,3 19,12 5,21" />
               </svg>
             </div>
@@ -68,7 +72,7 @@ export default function TabCard({ job }: TabCardProps) {
 function StatusBadge({ status, step }: { status: string; step: string | null }) {
   if (status === "done") {
     return (
-      <span className="bg-accent text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
+      <span className="bg-accent text-on-accent text-[10px] font-bold px-2 py-0.5 rounded-full font-mono tracking-wider">
         READY
       </span>
     );

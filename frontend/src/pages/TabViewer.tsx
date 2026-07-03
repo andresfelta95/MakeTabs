@@ -158,7 +158,7 @@ function DownloadButton({ tab, title, artist }: DownloadButtonProps) {
       onClick={handleDownload}
       title="Download tab as text"
       className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold
-                 border border-purple-400/40 text-purple-400 hover:bg-purple-400/10 transition-colors"
+                 border border-chip/50 text-chip hover:bg-chip/10 transition-colors"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3v13M5 16l7 7 7-7"/><line x1="3" y1="23" x2="21" y2="23"/>
