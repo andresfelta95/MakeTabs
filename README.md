@@ -1,13 +1,20 @@
 # MakeTabs
 
-Generate guitar tabs from Spotify tracks using audio ML.
+Any song → **guitar tabs** & **16-bit chiptunes**, from Spotify.
 
 ## What it does
 
 1. Connect your Spotify account
-2. Browse your playlists or search for a song
-3. MakeTabs checks if the track has guitar
-4. If it does, generates guitar tabs using audio source separation and pitch transcription
+2. Search any song (or browse your playlists)
+3. Pick a format:
+   - **🎸 Tabs** — transcribes the guitar (Songsterr-first, ML fallback: source
+     separation + pitch transcription) into playable tabs with synced playback
+   - **🕹️ 16-bit** — remakes the song as a chiptune (melody/harmony/bass, plus
+     opt-in solo & drums) played on a Web Audio synth
+
+UI is themed as a "backstage amp-rig" — see [docs/DESIGN.md](docs/DESIGN.md).
+Before touching the pipelines or deploying, read
+[docs/DOS_AND_DONTS.md](docs/DOS_AND_DONTS.md).
 
 ## Stack
 
