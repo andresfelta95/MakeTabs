@@ -104,6 +104,14 @@ export interface TabJob {
   completed_at: string | null;
 }
 
+/** The subset of a job that library cards need — TabJob and ChiptuneJob both satisfy it. */
+export interface LibraryCardJob {
+  job_id: string;
+  status: TabStatus;
+  current_step: string | null;
+  track: Track | null;
+}
+
 export interface CachedTabInfo {
   status: TabStatus;
   job_id: string;
@@ -156,6 +164,37 @@ export interface ChiptuneData {
     drums: ChiptuneDrumTrack;
   };
 }
+
+// ── Folder types ──────────────────────────────────────────────────────────────
+
+export type FolderItemType = "tab" | "chiptune";
+
+export interface Folder {
+  id: string;
+  name: string;
+  created_at: string;
+  tab_count: number;
+  chiptune_count: number;
+}
+
+export interface FolderItem {
+  id: string;
+  item_type: FolderItemType;
+  added_at: string;
+  track: Track;
+  job_id: string | null;
+  job_status: TabStatus | null;
+}
+
+export interface FolderDetail {
+  id: string;
+  name: string;
+  created_at: string;
+  items: FolderItem[];
+}
+
+/** spotify_track_id → ids of folders containing that song (for one format) */
+export type FolderMembershipMap = Record<string, string[]>;
 
 export interface ChiptuneJob {
   job_id: string;

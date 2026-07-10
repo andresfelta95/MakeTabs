@@ -29,10 +29,11 @@ chiptune pipeline or deploying.
   (`docker exec maketabs-backend python -c "from app.services.chiptune_pipeline import CURRENT_ALGORITHM; print(CURRENT_ALGORITHM)"`).
 - **DON'T conclude "my change didn't work"** until you've confirmed it is both
   deployed (right service rebuilt) and, for audio, actually heard.
-- **DON'T refresh a `/chiptune/<id>` or `/tab/<id>` URL directly** — nginx
-  proxies those paths to the backend API, so you get raw JSON. It's a known
-  path collision between SPA routes and API routes. Navigate from the root
-  (`tabs.paisbru.com`) instead.
+- **DO keep all backend routes under `/api`.** Since 2026-07 nginx proxies only
+  `/api/*` (prefix stripped) and `/health` to the backend; every other path is
+  the SPA. This removed the old SPA/API path collision — refreshing
+  `/chiptune/<id>` or `/tab/<id>` now works. New backend routers need no nginx
+  change; new frontend calls must go through the axios client (baseURL `/api`).
 
 ## Change discipline
 

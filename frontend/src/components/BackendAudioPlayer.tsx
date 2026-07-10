@@ -24,7 +24,7 @@ export default function BackendAudioPlayer({ jobId }: BackendAudioPlayerProps) {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    const audio = new Audio(`/tabs/${jobId}/audio`);
+    const audio = new Audio(`/api/tabs/${jobId}/audio`);
     audio.preload = "metadata";
     audioRef.current = audio;
 
@@ -93,7 +93,7 @@ export default function BackendAudioPlayer({ jobId }: BackendAudioPlayerProps) {
     if (downloading) return;
     setDownloading(true);
     try {
-      const res = await fetch(`/tabs/${jobId}/audio`, { credentials: "include" });
+      const res = await fetch(`/api/tabs/${jobId}/audio`, { credentials: "include" });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const blob = await res.blob();
       const disposition = res.headers.get("content-disposition") ?? "";

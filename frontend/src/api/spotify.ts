@@ -51,8 +51,8 @@ export const getTabStatuses = async (spotifyIds: string[]): Promise<TabStatusMap
   return data;
 };
 
-export const getTabHistory = async (): Promise<TabJob[]> => {
-  const { data } = await client.get<TabJob[]>("/tabs/history");
+export const getTabHistory = async (limit = 200): Promise<TabJob[]> => {
+  const { data } = await client.get<TabJob[]>("/tabs/history", { params: { limit } });
   return data;
 };
 
@@ -69,7 +69,7 @@ export const getChiptuneJob = async (jobId: string): Promise<ChiptuneJob> => {
   return data;
 };
 
-export const getChiptuneHistory = async (): Promise<ChiptuneJob[]> => {
-  const { data } = await client.get<ChiptuneJob[]>("/chiptune/history");
+export const getChiptuneHistory = async (limit = 200): Promise<ChiptuneJob[]> => {
+  const { data } = await client.get<ChiptuneJob[]>("/chiptune/history", { params: { limit } });
   return data;
 };
