@@ -17,9 +17,10 @@ export default defineConfig({
         }
       : undefined,
     proxy: {
-      "/auth": "http://127.0.0.1:8000",
-      "/spotify": "http://127.0.0.1:8000",
-      "/tabs": "http://127.0.0.1:8000",
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        rewrite: (p) => p.replace(/^\/api/, ""),
+      },
       "/health": "http://127.0.0.1:8000",
     },
   },

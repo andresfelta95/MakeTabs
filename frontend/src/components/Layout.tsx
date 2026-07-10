@@ -1,3 +1,4 @@
+import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { logout } from "../api/auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,12 +23,20 @@ export default function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-base text-primary">
       <header className="sticky top-0 z-10 border-b border-theme bg-elevated/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <a href="/" className="flex items-center gap-2" aria-label="MakeTabs home">
-            <GuitarPickIcon />
-            <span className="font-display text-xl font-extrabold tracking-tight">
-              Make<span className="text-accent">Tabs</span>
-            </span>
-          </a>
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-2" aria-label="MakeTabs home">
+              <GuitarPickIcon />
+              <span className="font-display text-xl font-extrabold tracking-tight">
+                Make<span className="text-accent">Tabs</span>
+              </span>
+            </Link>
+
+            <nav className="flex items-center gap-1" aria-label="Main">
+              <PageLink to="/" label="Home" />
+              <PageLink to="/tabs" label="🎸 Tabs" accent="accent" />
+              <PageLink to="/16bit" label="🕹️ 16-bit" accent="chip" />
+            </nav>
+          </div>
 
           <div className="flex items-center gap-4">
             <button
@@ -55,6 +64,23 @@ export default function Layout({ children }: LayoutProps) {
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
     </div>
+  );
+}
+
+function PageLink({ to, label, accent = "accent" }: { to: string; label: string; accent?: "accent" | "chip" }) {
+  const activeColor = accent === "chip" ? "text-chip bg-chip/10" : "text-accent bg-accent-soft";
+  return (
+    <NavLink
+      to={to}
+      end={to === "/"}
+      className={({ isActive }) =>
+        `rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+          isActive ? activeColor : "text-secondary hover:bg-card-hover hover:text-primary"
+        }`
+      }
+    >
+      {label}
+    </NavLink>
   );
 }
 

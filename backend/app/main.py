@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import engine
 from app.models.chiptune import ChiptuneGeneration
 from app.models.tab import TabGeneration
-from app.routes import auth, chiptune, spotify, tabs
+from app.routes import auth, chiptune, folders, spotify, tabs
 
 # uvicorn only configures its own loggers; without this the pipeline
 # logger.info lines never reach docker logs.
@@ -62,6 +62,7 @@ app.include_router(auth.router)
 app.include_router(spotify.router)
 app.include_router(tabs.router)
 app.include_router(chiptune.router)
+app.include_router(folders.router)
 
 
 @app.get("/health")

@@ -73,7 +73,7 @@ export function useGenerateTabs() {
 export function useTabHistory() {
   return useQuery({
     queryKey: ["tab-history"],
-    queryFn: getTabHistory,
+    queryFn: () => getTabHistory(),
     staleTime: 30_000,
     refetchInterval: (query) => {
       const jobs = query.state.data ?? [];
@@ -111,7 +111,7 @@ export function useGenerateChiptune() {
 export function useChiptuneHistory() {
   return useQuery({
     queryKey: ["chiptune-history"],
-    queryFn: getChiptuneHistory,
+    queryFn: () => getChiptuneHistory(),
     staleTime: 30_000,
     refetchInterval: (query) => {
       const jobs = query.state.data ?? [];

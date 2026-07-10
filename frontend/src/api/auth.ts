@@ -10,4 +10,4 @@ export const logout = async (): Promise<void> => {
   await client.get("/auth/logout");
 };
 
-export const loginUrl = "/auth/login";
+export const loginUrl = "/api/auth/login";

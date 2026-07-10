@@ -3,7 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuth } from "./hooks/useAuth";
 import { ThemeProvider } from "./context/ThemeContext";
 import Login from "./pages/Login";
-import Home from "./pages/Home";
+import Landing from "./pages/Landing";
+import TabsLibrary from "./pages/TabsLibrary";
+import ChiptuneLibrary from "./pages/ChiptuneLibrary";
 import TabViewer from "./pages/TabViewer";
 import ChiptuneViewer from "./pages/ChiptuneViewer";
 import Callback from "./pages/Callback";
@@ -45,7 +47,23 @@ export default function App() {
             path="/"
             element={
               <AuthGuard>
-                <Home />
+                <Landing />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/tabs"
+            element={
+              <AuthGuard>
+                <TabsLibrary />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/16bit"
+            element={
+              <AuthGuard>
+                <ChiptuneLibrary />
               </AuthGuard>
             }
           />

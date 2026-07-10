@@ -95,7 +95,7 @@ async def generate_tabs(
 
 @router.get("/history", response_model=list[TabJobOut])
 async def get_tab_history(
-    limit: int = Query(30, ge=1, le=50),
+    limit: int = Query(30, ge=1, le=200),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

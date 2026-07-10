@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
-import type { ChiptuneJob } from "../types";
+import type { LibraryCardJob } from "../types";
 
 interface ChiptuneCardProps {
-  job: ChiptuneJob;
+  job: LibraryCardJob;
+  /** Extra control rendered over the art's top-left corner (e.g. save-to-folder). */
+  topLeftAction?: React.ReactNode;
 }
 
-export default function ChiptuneCard({ job }: ChiptuneCardProps) {
+export default function ChiptuneCard({ job, topLeftAction }: ChiptuneCardProps) {
   const navigate = useNavigate();
   const track = job.track;
 
@@ -48,6 +50,8 @@ export default function ChiptuneCard({ job }: ChiptuneCardProps) {
         <div className="absolute top-2 right-2">
           <ChipStatusBadge status={job.status} step={job.current_step} />
         </div>
+
+        {topLeftAction && <div className="absolute top-2 left-2">{topLeftAction}</div>}
 
         {/* Play icon on hover */}
         {job.status === "done" && (
