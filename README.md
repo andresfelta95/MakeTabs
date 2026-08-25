@@ -72,10 +72,70 @@ npm run dev
 - [Spotify Integration](docs/spotify-integration.md) — OAuth setup and API usage
 - [Scalability Notes](docs/scalability.md) — what changes when going public
 
+## Deploy
+
+Live at **https://tabs.paisbru.com** (note: `tabs`, not `maketabs`).
+
+```bash
+# rebuild + (re)start BOTH services
+docker compose -f /home/server_pc/docker/compose/maketabs.yml up -d --build
+```
+
+- `maketabs-backend` — FastAPI on :8000, **8 GB limit + an NVIDIA GPU reservation**
+  (Demucs and basic-pitch run on the GPU). Torch / basic-pitch model caches and
+  generated audio live in named volumes so rebuilds don't re-download models.
+- `maketabs-frontend` — static nginx on :80, 128 MB / 0.25 CPU.
+- Secrets come from `/home/server_pc/docker/maketabs.env` (NOT in git).
+- cloudflared routes `tabs.paisbru.com → maketabs-frontend:80`.
+
+> Frontend and backend are separate images — rebuild the one(s) you changed.
+> Editing source alone does nothing live until the image is rebuilt.
+
 ## Current Status
 
-- [ ] Spotify OAuth + playlist/search (in progress)
-- [ ] Audio download via yt-dlp
-- [ ] Guitar detection (Demucs)
-- [ ] Tab generation (basic-pitch)
-- [ ] Tab renderer (React)
+**Both pipelines are live in production.** Counts as of 2026-08-24:
+
+| Feature | State |
+|---|---|
+| Spotify OAuth + search / playlists | ✅ done |
+| Audio download (yt-dlp) | ✅ done |
+| **Tabs — Songsterr path** | ✅ 53 tabs generated |
+| **Tabs — ML fallback** (Demucs `htdemucs_6s` → basic-pitch) | ✅ 54 tabs generated, 10 failed |
+| Tab renderer + synced playback (React) | ✅ done |
+| **Chiptunes** (Songsterr path + Demucs 4-stem ML fallback) | ✅ 116 generated, 0 failed |
+| Personal folders, multi-page library, filters | ✅ done |
+| Lyrics (Genius) | ✅ done |
+
+**Tab success rate: 107 / 117 (91%).** All 10 failures are on the ML fallback path.
+By `error_message`:
+
+| Failure | Count | Kind |
+|---|---|---|
+| `Job interrupted by server restart` | 4 | infrastructure |
+| `Job orphaned by container restart` | 3 | infrastructure |
+| numpy `inhomogeneous shape ... (3905, 5)` | 1 | pipeline bug |
+| Demucs `htdemucs --two-stems` timed out after 900 s | 1 | pipeline bug |
+| `list indices must be integers or slices, not tuple` | 1 | pipeline bug |
+
+So **7 of 10 are just jobs killed mid-flight by a container restart**, not
+transcription quality — they'd likely succeed on a re-run. Only 3 are real bugs.
+There is no resume-on-restart: an in-flight job dies with the container. Chiptunes
+have never failed (116/116).
+
+Both pipelines are **Songsterr-first**: if Songsterr has the song, its MIDI is used
+directly (fast, accurate); otherwise the audio is downloaded and run through source
+separation + transcription. Tab algorithm version is tracked per generation
+(`CURRENT_ALGORITHM`, currently `5.1.1`) so older tabs can be regenerated.
+
+Production DB is **PostgreSQL** (`maketabs` on the shared `postgres` container),
+not SQLite — SQLite is the local-dev default only.
+
+### Not done yet
+
+- [ ] Multi-user — the app works, but there's exactly **1 registered user**; nothing
+      has been load-tested beyond a single account (see [docs/scalability.md](docs/scalability.md))
+- [ ] Resume or auto-requeue jobs killed by a container restart (7 of 10 failures)
+- [ ] Retry / regenerate UI for failed tabs
+- [ ] Fix the 3 real pipeline bugs listed above (numpy shape, Demucs 900 s timeout,
+      tuple indexing)
+- [ ] Drums and solo are opt-in per chiptune; no per-instrument mixing UI
