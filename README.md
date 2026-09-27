@@ -73,6 +73,8 @@ npm run dev
 
 ## Documentation
 
+- [Accuracy](docs/ACCURACY.md) — where transcription quality actually comes
+  from, measured against the production DB, and the ranked options to improve it
 - [Architecture](docs/architecture.md) — system design and data flow
 - [API Reference](docs/api.md) — backend endpoints
 - [Spotify Integration](docs/spotify-integration.md) — OAuth setup and API usage
