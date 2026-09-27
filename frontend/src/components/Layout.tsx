@@ -3,6 +3,9 @@ import { useAuth } from "../hooks/useAuth";
 import { logout } from "../api/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "../context/ThemeContext";
+import PixelSprite from "./PixelSprite";
+import { SPRITES } from "../lib/sprites";
+import { Led } from "./pixel";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,21 +27,24 @@ export default function Layout({ children }: LayoutProps) {
       <header className="sticky top-0 z-10 border-b border-theme bg-elevated/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-2" aria-label="MakeTabs home">
-              <GuitarPickIcon />
-              <span className="font-display text-xl font-extrabold tracking-tight">
+            <Link to="/" className="flex items-center gap-2.5" aria-label="MakeTabs home">
+              <PixelSprite sprite={SPRITES.pick} className="h-6 w-6 text-accent pix-glow" />
+              <span className="font-pixel text-[13px] tracking-tight">
                 Make<span className="text-accent">Tabs</span>
               </span>
             </Link>
 
             <nav className="flex items-center gap-1" aria-label="Main">
-              <PageLink to="/" label="Home" />
-              <PageLink to="/tabs" label="🎸 Tabs" accent="accent" />
-              <PageLink to="/16bit" label="🕹️ 16-bit" accent="chip" />
+              <PageLink to="/" label="Home" sprite={SPRITES.amp} />
+              <PageLink to="/tabs" label="Tabs" sprite={SPRITES.pick} accent="accent" />
+              <PageLink to="/16bit" label="16-bit" sprite={SPRITES.cart} accent="chip" />
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className="hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-secondary md:flex">
+              <Led pulse /> rig on
+            </span>
             <button
               onClick={toggle}
               aria-label="Toggle theme"
@@ -51,7 +57,7 @@ export default function Layout({ children }: LayoutProps) {
                 <span className="hidden text-sm text-secondary sm:block">{user.display_name}</span>
                 <button
                   onClick={handleLogout}
-                  className="rounded-full border border-theme px-3 py-1.5 text-sm text-secondary transition-colors hover:border-accent/40 hover:text-primary"
+                  className="border border-theme px-3 py-1.5 text-sm text-secondary transition-colors hover:border-accent/40 hover:text-primary"
                 >
                   Log out
                 </button>
@@ -67,32 +73,31 @@ export default function Layout({ children }: LayoutProps) {
   );
 }
 
-function PageLink({ to, label, accent = "accent" }: { to: string; label: string; accent?: "accent" | "chip" }) {
+function PageLink({
+  to,
+  label,
+  sprite,
+  accent = "accent",
+}: {
+  to: string;
+  label: string;
+  sprite: (typeof SPRITES)[keyof typeof SPRITES];
+  accent?: "accent" | "chip";
+}) {
   const activeColor = accent === "chip" ? "text-chip bg-chip/10" : "text-accent bg-accent-soft";
   return (
     <NavLink
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        `rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+        `flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-semibold transition-colors ${
           isActive ? activeColor : "text-secondary hover:bg-card-hover hover:text-primary"
         }`
       }
     >
+      <PixelSprite sprite={sprite} className="h-4 w-4 shrink-0" />
       {label}
     </NavLink>
-  );
-}
-
-function GuitarPickIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-accent">
-      <path
-        d="M12 2C8.5 2 6 5 6 8c0 2.5 1.5 4.5 3 6l1.5 6.5a1.5 1.5 0 003 0L15 14c1.5-1.5 3-3.5 3-6 0-3-2.5-6-6-6z"
-        fill="currentColor"
-        opacity="0.9"
-      />
-    </svg>
   );
 }
 

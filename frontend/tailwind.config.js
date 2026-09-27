@@ -20,6 +20,9 @@ export default {
         display: ['"Bricolage Grotesque"', '"Space Grotesk"', "sans-serif"],
         body: ['"Space Grotesk"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+        // Bitmap display face. Short, fixed strings only — see .font-pixel in
+        // index.css, which also applies the tracking and uppercasing it needs.
+        pixel: ['"Press Start 2P"', '"JetBrains Mono"', "monospace"],
       },
       keyframes: {
         eq: {

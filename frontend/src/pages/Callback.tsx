@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import PixelSprite from "../components/PixelSprite";
+import { SPRITES } from "../lib/sprites";
 
 export default function Callback() {
   const navigate = useNavigate();
@@ -27,8 +29,9 @@ export default function Callback() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-base flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base">
+      <PixelSprite sprite={SPRITES.pick} className="h-10 w-10 text-accent pix-bob" />
+      <span className="font-pixel text-[9px] text-secondary">Connecting…</span>
     </div>
   );
 }

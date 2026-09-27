@@ -1,4 +1,5 @@
 import LibraryView from "../components/LibraryView";
+import { SPRITES } from "../lib/sprites";
 import { useTabHistory } from "../hooks/useSpotify";
 
 export default function TabsLibrary() {
@@ -8,7 +9,7 @@ export default function TabsLibrary() {
       kind="tab"
       title="My Tabs"
       hint="Guitar transcriptions, ready to play along"
-      emptyEmoji="🎸"
+      emptySprite={SPRITES.pick}
       accent="accent"
       jobs={data}
       isLoading={isLoading}

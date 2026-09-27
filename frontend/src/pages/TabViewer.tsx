@@ -4,6 +4,8 @@ import Layout from "../components/Layout";
 import PipelineStatus from "../components/PipelineStatus";
 import TabPlayer from "../components/TabPlayer";
 import BackendAudioPlayer from "../components/BackendAudioPlayer";
+import PixelSprite from "../components/PixelSprite";
+import { SPRITES } from "../lib/sprites";
 import { useTabJob } from "../hooks/useSpotify";
 import { generateTabs } from "../api/spotify";
 import type { GuitarTab, LyricsSection, TabData, TabSection } from "../types";
@@ -28,8 +30,9 @@ export default function TabViewer() {
   if (isLoading || !job) {
     return (
       <Layout>
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center justify-center gap-3 py-20">
+          <PixelSprite sprite={SPRITES.pick} className="h-10 w-10 text-accent pix-bob" />
+          <span className="font-pixel text-[9px] text-secondary">Loading…</span>
         </div>
       </Layout>
     );
@@ -59,9 +62,9 @@ export default function TabViewer() {
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold
-                         bg-accent text-black hover:scale-105 active:scale-95
-                         disabled:opacity-50 disabled:cursor-wait transition-transform"
+              className="border border-accent bg-accent px-4 py-2 font-pixel text-[9px] text-on-accent
+                         hover:brightness-110 active:scale-95
+                         disabled:cursor-wait disabled:opacity-50 transition-all"
             >
               {regenerating ? "Starting…" : "Try again"}
             </button>
@@ -73,7 +76,7 @@ export default function TabViewer() {
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             {job.track?.image_url && (
-              <img src={job.track.image_url} alt="" className="w-16 h-16 rounded-lg shadow" />
+              <img src={job.track.image_url} alt="" className="h-16 w-16 object-cover" />
             )}
             <div className="flex-1">
               <h2 className="text-xl font-bold text-primary">{job.track?.title}</h2>
@@ -85,8 +88,8 @@ export default function TabViewer() {
                 onClick={handleRegenerate}
                 disabled={regenerating}
                 title="Regenerate tab"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold
-                           border border-theme text-secondary hover:text-primary hover:border-accent/50
+                className="flex items-center gap-2 border border-theme px-3 py-1.5 font-pixel text-[8px]
+                           text-secondary hover:border-accent/50 hover:text-accent
                            disabled:opacity-50 disabled:cursor-wait transition-colors"
               >
                 {regenerating ? (
@@ -157,8 +160,8 @@ function DownloadButton({ tab, title, artist }: DownloadButtonProps) {
     <button
       onClick={handleDownload}
       title="Download tab as text"
-      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold
-                 border border-chip/50 text-chip hover:bg-chip/10 transition-colors"
+      className="flex items-center gap-2 border border-chip/50 px-3 py-1.5 font-pixel text-[8px]
+                 text-chip hover:bg-chip/10 transition-colors"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3v13M5 16l7 7 7-7"/><line x1="3" y1="23" x2="21" y2="23"/>
@@ -182,10 +185,10 @@ function TabDisplay({ tab, songTitle, jobId }: { tab: TabData; songTitle?: strin
               <button
                 key={i}
                 onClick={() => setActiveGuitar(i)}
-                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors
+                className={`flex items-center gap-1.5 border px-3 py-1.5 font-pixel text-[8px] transition-colors
                   ${activeGuitar === i
-                    ? "bg-accent text-black"
-                    : "border border-theme text-secondary hover:text-primary"
+                    ? "border-accent bg-accent text-on-accent"
+                    : "border-theme text-secondary hover:border-accent/50 hover:text-accent"
                   }`}
               >
                 {g.name}
@@ -245,10 +248,15 @@ function AsciiTab({ guitar, lyricsSections, tuning, bpm }: AsciiTabProps) {
   let lastLyricsIdx = -1;
 
   return (
-    <div className="bg-elevated border border-theme rounded-xl p-6 overflow-x-auto">
-      <div className="flex items-center gap-6 mb-6 text-sm text-secondary">
-        <span>Tuning: {tuning.join(" ")}</span>
-        <span>BPM: {bpm}</span>
+    <div className="relative overflow-x-auto border border-theme bg-elevated p-6">
+      <span aria-hidden className="absolute left-0 top-0 h-2.5 w-2.5 border-l border-t border-accent opacity-70" />
+      <span aria-hidden className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b border-r border-accent opacity-70" />
+      <div className="mb-6 flex items-center gap-5 font-mono text-xs text-secondary">
+        <span className="flex items-center gap-1.5">
+          <PixelSprite sprite={SPRITES.pick} className="h-4 w-4 text-accent" />
+          {tuning.join(" ")}
+        </span>
+        <span>{bpm} BPM</span>
       </div>
 
       {guitar.sections.map((section, si) => {
@@ -264,18 +272,14 @@ function AsciiTab({ guitar, lyricsSections, tuning, bpm }: AsciiTabProps) {
           <div key={si} className="mb-10">
             {lyrics && (
               <div className="mb-3 border-l-2 border-accent pl-3">
-                <p className="text-xs font-bold text-accent uppercase tracking-wider mb-1">
-                  {lyrics.name}
-                </p>
+                <p className="mb-1.5 font-pixel text-[8px] text-accent">{lyrics.name}</p>
                 <p className="text-xs text-secondary whitespace-pre-line leading-relaxed">
                   {lyrics.text}
                 </p>
               </div>
             )}
 
-            <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-2">
-              {section.name}
-            </p>
+            <p className="mb-2 font-pixel text-[8px] text-secondary">{section.name}</p>
 
             <pre className="font-mono text-sm text-primary leading-relaxed whitespace-pre">
               {renderSection(section, strings)}

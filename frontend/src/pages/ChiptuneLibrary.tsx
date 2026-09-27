@@ -1,4 +1,5 @@
 import LibraryView from "../components/LibraryView";
+import { SPRITES } from "../lib/sprites";
 import { useChiptuneHistory } from "../hooks/useSpotify";
 
 export default function ChiptuneLibrary() {
@@ -8,7 +9,7 @@ export default function ChiptuneLibrary() {
       kind="chiptune"
       title="My 16-bit"
       hint="Chiptune remakes — arcade-cab energy"
-      emptyEmoji="🕹️"
+      emptySprite={SPRITES.cart}
       accent="chip"
       jobs={data}
       isLoading={isLoading}

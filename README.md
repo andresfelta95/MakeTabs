@@ -12,7 +12,13 @@ Any song → **guitar tabs** & **16-bit chiptunes**, from Spotify.
    - **🕹️ 16-bit** — remakes the song as a chiptune (melody/harmony/bass, plus
      opt-in solo & drums) played on a Web Audio synth
 
-UI is themed as a "backstage amp-rig" — see [docs/DESIGN.md](docs/DESIGN.md).
+UI is themed as a **"backstage amp-rig, 16-bit"**: warm tube-amber on
+stage-black (amber = tabs, violet = 16-bit), with a pixel-art layer of 16x16
+character-grid sprites, a sequencer-roll backdrop and bitmap display type. The
+five waveform sprites are wired to the channels they are actually synthesised
+with, so the player's mute row doubles as a legend for the mix. No image
+assets — it is all generated SVG. See [docs/DESIGN.md](docs/DESIGN.md).
+
 Before touching the pipelines or deploying, read
 [docs/DOS_AND_DONTS.md](docs/DOS_AND_DONTS.md).
 

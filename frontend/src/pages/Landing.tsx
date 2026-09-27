@@ -3,6 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import SearchBar from "../components/SearchBar";
 import TrackCard from "../components/TrackCard";
+import PixelSprite from "../components/PixelSprite";
+import PianoRollBackdrop from "../components/PianoRollBackdrop";
+import { PixelHeading } from "../components/pixel";
+import { SPRITES } from "../lib/sprites";
 import {
   useChiptuneHistory,
   useGenerateChiptune,
@@ -59,27 +63,71 @@ export default function Landing() {
   return (
     <Layout>
       {/* Hero — search is THE action */}
-      <div className={`mx-auto max-w-2xl text-center transition-all ${isSearching ? "mb-6" : "mb-10 pt-6 sm:pt-10"}`}>
+      <div className={`relative ${isSearching ? "mb-6" : "mb-12 pt-4 sm:pt-8"}`}>
         {!isSearching && (
           <>
-            <h1 className="font-display text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-              Any song →{" "}
-              <span className="text-accent">guitar tabs</span>
-              <span className="text-secondary"> & </span>
-              <span className="text-chip">16-bit</span>
-            </h1>
-            <p className="mx-auto mt-3 max-w-md text-sm text-secondary sm:text-base">
-              Search a track, pick a format, and the rig does the rest.
-            </p>
+            <PianoRollBackdrop
+              seed={11}
+              intensity={0.9}
+              className="pointer-events-none absolute -inset-x-6 -top-8 bottom-0 -z-10"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -inset-x-6 -top-8 bottom-0 -z-10"
+              style={{
+                background:
+                  "radial-gradient(34rem 18rem at 50% 45%, var(--bg-base) 30%, transparent 100%)",
+              }}
+            />
           </>
         )}
-        <div className={isSearching ? "" : "mt-6"}>
-          <SearchBar onSearch={handleSearch} />
+
+        <div className="mx-auto max-w-2xl text-center">
+          {!isSearching && (
+            <>
+              <h1 className="pix-rise font-pixel text-base leading-[1.9] text-primary sm:text-xl">
+                Any song →<br />
+                <span className="text-accent">guitar tabs</span>
+                <span className="text-secondary"> & </span>
+                <span className="text-chip">16-bit</span>
+              </h1>
+
+              <div
+                className="pix-rise mt-5 flex items-center justify-center gap-5 text-secondary"
+                style={{ ["--rise-delay" as string]: "0.08s" }}
+              >
+                {/* Staggered so the three do not bob in lockstep. */}
+                {[
+                  { s: SPRITES.pick, c: "text-accent", d: "0s" },
+                  { s: SPRITES.soundchip, c: "text-secondary", d: "0.25s" },
+                  { s: SPRITES.cart, c: "text-chip", d: "0.5s" },
+                ].map(({ s, c, d }, i) => (
+                  <span
+                    key={i}
+                    className="pix-bob inline-flex"
+                    style={{ ["--bob-delay" as string]: d }}
+                  >
+                    <PixelSprite sprite={s} className={`h-7 w-7 ${c}`} />
+                  </span>
+                ))}
+              </div>
+
+              <p
+                className="pix-rise mx-auto mt-4 max-w-md text-sm text-secondary sm:text-base"
+                style={{ ["--rise-delay" as string]: "0.14s" }}
+              >
+                Search a track, pick a format, and the rig does the rest.
+              </p>
+            </>
+          )}
+          <div className={isSearching ? "" : "pix-rise mt-7"} style={{ ["--rise-delay" as string]: "0.2s" }}>
+            <SearchBar onSearch={handleSearch} />
+          </div>
         </div>
       </div>
 
       {chiptuneError && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+        <div className="mb-4 border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
           {chiptuneError}
         </div>
       )}
@@ -87,17 +135,11 @@ export default function Landing() {
       {/* Search results */}
       {isSearching && (
         <section className="mb-10">
-          <div className="mb-1 flex items-baseline gap-2.5">
-            <h2 className="font-display text-2xl font-bold tracking-tight text-primary">
-              Results for “{searchQuery}”
-            </h2>
-            {tracks.length > 0 && (
-              <span className="rounded-full bg-accent-soft px-2 py-0.5 font-mono text-[11px] font-semibold text-accent">
-                {tracks.length}
-              </span>
-            )}
-          </div>
-          <div className="mb-3 h-0.5 w-10 rounded-full bg-accent/60" />
+          <PixelHeading
+            title={`Results — ${searchQuery}`}
+            sprite={SPRITES.magnifier}
+            count={tracks.length}
+          />
           {tracks.length === 0 ? (
             <p className="py-8 text-center text-sm text-secondary">No songs found</p>
           ) : (
@@ -120,21 +162,34 @@ export default function Landing() {
 
       {!isSearching && (
         <>
-          {/* How it works */}
+          {/* How it works — three racked units */}
           <section className="mx-auto mb-10 max-w-3xl">
-            <h2 className="mb-3 text-center font-display text-lg font-bold tracking-tight text-primary">
-              How it works
-            </h2>
+            <h2 className="mb-4 text-center font-pixel text-[11px] text-secondary">How it works</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                ["1", "Search", "Find any song on Spotify — title or artist."],
-                ["2", "Pick a format", "🎸 Tabs transcribes the guitar. 🕹️ 16-bit remakes it as a chiptune."],
-                ["3", "Play along", "Follow the tab with synced playback, or vibe to the 16-bit mix."],
-              ].map(([n, title, body]) => (
-                <div key={n} className="rounded-xl border border-theme bg-card p-4 text-left">
-                  <div className="font-display text-3xl font-extrabold text-accent/60">{n}</div>
-                  <p className="mt-1 font-semibold text-primary">{title}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-secondary">{body}</p>
+                ["01", "Search", "Find any song on Spotify — title or artist.", SPRITES.magnifier],
+                ["02", "Pick a format", "Tabs transcribes the guitar. 16-bit remakes it as a chiptune.", SPRITES.soundchip],
+                ["03", "Play along", "Follow the tab with synced playback, or vibe to the 16-bit mix.", SPRITES.notes],
+              ].map(([n, title, body, sprite]) => (
+                <div
+                  key={n as string}
+                  className="relative border border-theme bg-card p-4 text-left"
+                >
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-0 h-2 w-2 border-l border-t border-accent opacity-60"
+                  />
+                  <div className="mb-2 flex items-center justify-between">
+                    <PixelSprite
+                      sprite={sprite as (typeof SPRITES)[keyof typeof SPRITES]}
+                      className="h-6 w-6 text-accent"
+                    />
+                    <span className="font-pixel text-[11px] text-accent opacity-50">
+                      {n as string}
+                    </span>
+                  </div>
+                  <p className="font-pixel text-[10px] text-primary">{title as string}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-secondary">{body as string}</p>
                 </div>
               ))}
             </div>
@@ -144,7 +199,7 @@ export default function Landing() {
           <section className="mx-auto grid max-w-3xl gap-4 sm:grid-cols-2">
             <FormatCard
               to="/tabs"
-              emoji="🎸"
+              sprite={SPRITES.pick}
               title="Guitar Tabs"
               accent="accent"
               count={history?.length}
@@ -153,19 +208,19 @@ export default function Landing() {
             />
             <FormatCard
               to="/16bit"
-              emoji="🕹️"
+              sprite={SPRITES.cart}
               title="16-bit"
               accent="chip"
               count={chiptuneHistory?.length}
-              body="Every song remade as a chiptune — square-wave melody, sawtooth harmony, triangle bass, opt-in solo & drums. Arcade-cab energy, on demand."
+              body="Every song remade as a chiptune — square melody, sawtooth harmony, triangle bass, opt-in solo & drums. Arcade-cab energy, on demand."
               cta="Open my 16-bit"
             />
           </section>
 
           <p className="mt-10 text-center text-xs text-secondary">
-            Everything you generate is saved to your libraries automatically — organize favorites into
-            folders from the <span className="font-semibold">🎸 Tabs</span> and{" "}
-            <span className="font-semibold">🕹️ 16-bit</span> pages.
+            Everything you generate is saved to your libraries automatically — organize favorites
+            into folders from the <span className="font-semibold text-accent">Tabs</span> and{" "}
+            <span className="font-semibold text-chip">16-bit</span> pages.
           </p>
         </>
       )}
@@ -174,10 +229,16 @@ export default function Landing() {
 }
 
 function FormatCard({
-  to, emoji, title, body, cta, count, accent,
+  to,
+  sprite,
+  title,
+  body,
+  cta,
+  count,
+  accent,
 }: {
   to: string;
-  emoji: string;
+  sprite: (typeof SPRITES)[keyof typeof SPRITES];
   title: string;
   body: string;
   cta: string;
@@ -185,24 +246,34 @@ function FormatCard({
   accent: "accent" | "chip";
 }) {
   const color = accent === "chip" ? "text-chip" : "text-accent";
-  const border = accent === "chip" ? "hover:border-chip/50" : "hover:border-accent/40";
-  const badge = accent === "chip" ? "bg-chip/15 text-chip" : "bg-accent-soft text-accent";
+  const border = accent === "chip" ? "hover:border-chip/50" : "hover:border-accent/50";
+  const bracket = accent === "chip" ? "border-chip" : "border-accent";
+  const glow = accent === "chip" ? "pix-glow-chip" : "pix-glow";
+
   return (
     <Link
       to={to}
-      className={`group rounded-xl border border-theme bg-card p-5 transition-all duration-200 hover:scale-[1.01] hover:shadow-lg ${border}`}
+      className={`group relative border border-theme bg-card p-5 transition-colors ${border}`}
     >
-      <div className="flex items-center gap-2.5">
-        <span className="text-2xl">{emoji}</span>
-        <h3 className={`font-display text-xl font-extrabold tracking-tight ${color}`}>{title}</h3>
+      <span
+        aria-hidden
+        className={`absolute left-0 top-0 h-2.5 w-2.5 border-l border-t ${bracket} opacity-70`}
+      />
+      <span
+        aria-hidden
+        className={`absolute bottom-0 right-0 h-2.5 w-2.5 border-b border-r ${bracket} opacity-70`}
+      />
+      <div className="flex items-center gap-3">
+        <PixelSprite sprite={sprite} className={`h-8 w-8 shrink-0 ${color} ${glow}`} />
+        <h3 className={`font-pixel text-[12px] ${color}`}>{title}</h3>
         {typeof count === "number" && count > 0 && (
-          <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold ${badge}`}>
+          <span className={`ml-auto border border-theme px-1.5 py-0.5 font-mono text-[10px] ${color}`}>
             {count}
           </span>
         )}
       </div>
-      <p className="mt-2 text-sm leading-relaxed text-secondary">{body}</p>
-      <p className={`mt-3 text-sm font-semibold ${color}`}>
+      <p className="mt-3 text-sm leading-relaxed text-secondary">{body}</p>
+      <p className={`mt-3 font-pixel text-[9px] ${color}`}>
         {cta} <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
       </p>
     </Link>

@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { ChiptuneData, ChiptuneTonalTrack, DrumEvent } from "../types";
+import PixelSprite from "./PixelSprite";
+import { PixelMeter } from "./pixel";
+import { SPRITES, CHANNEL_SPRITE } from "../lib/sprites";
 
 const BEATS_PER_MEASURE = 16;
 const SCHEDULE_AHEAD = 0.4;
@@ -472,17 +475,31 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
     ...(data.tracks.harmony ? ["harmony"] : []),
     ...(data.tracks.lead ? ["lead"] : []),
     "bass",
+    // Drums were always generated and always default-muted, but had no toggle
+    // to turn them on. Listed last and still muted by default.
+    ...(drums.length > 0 ? ["drums"] : []),
   ];
-  const trackLabels: Record<string, string> = { melody: "Melody", harmony: "Harmony", lead: "Solo", bass: "Bass" };
+  const trackLabels: Record<string, string> = {
+    melody: "Melody",
+    harmony: "Harmony",
+    lead: "Solo",
+    bass: "Bass",
+    drums: "Drums",
+  };
 
   return (
-    <div className="bg-card border border-theme rounded-xl p-4 space-y-3">
+    <div className="relative border border-theme bg-card p-4 space-y-4">
+      {/* Corner brackets — the player reads as a unit racked in the rig. */}
+      <span aria-hidden className="absolute left-0 top-0 h-2.5 w-2.5 border-l border-t border-chip opacity-70" />
+      <span aria-hidden className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b border-r border-chip opacity-70" />
+
       {/* Transport controls */}
       <div className="flex items-center gap-3">
         <button
           onClick={status === "playing" ? handlePause : handlePlay}
-          className="w-10 h-10 rounded-full bg-accent text-black flex items-center justify-center
-                     hover:scale-105 active:scale-95 transition-transform flex-shrink-0"
+          title={status === "playing" ? "Pause" : "Play"}
+          className="w-10 h-10 bg-chip text-white flex items-center justify-center
+                     hover:brightness-110 active:scale-95 transition-all flex-shrink-0"
         >
           {status === "playing" ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -499,44 +516,53 @@ export default function ChiptunePlayer({ data, title }: ChiptunePlayerProps) {
         {status !== "idle" && (
           <button
             onClick={handleStop}
-            className="w-8 h-8 rounded-full border border-theme text-secondary
+            title="Stop"
+            className="w-8 h-8 border border-theme text-secondary
                        hover:text-primary flex items-center justify-center flex-shrink-0 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <rect x="3" y="3" width="18" height="18" />
             </svg>
           </button>
         )}
 
         <span className="text-xs text-secondary font-mono w-10 text-right">{fmt(elapsed)}</span>
-        <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
-          <div className="h-full bg-accent rounded-full" style={{ width: `${progress * 100}%`, transition: "none" }} />
-        </div>
+        <PixelMeter value={progress} accent="chip" segments={40} className="flex-1 text-chip" />
         <span className="text-xs text-secondary font-mono w-10">{fmt(total)}</span>
       </div>
 
-      {/* Track mute toggles + download */}
+      {/* Channel strip. Each button carries the waveform its voice is actually
+          synthesised with, so the mute row doubles as a legend for the mix. */}
       <div className="flex items-center gap-2 flex-wrap">
-        {trackKeys.map(key => (
-          <button
-            key={key}
-            onClick={() => toggleMute(key)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors
-              ${muted[key]
-                ? "border border-theme text-secondary opacity-50"
-                : "bg-accent/20 text-accent border border-accent/40"
-              }`}
-          >
-            {trackLabels[key]}
-          </button>
-        ))}
-        <span className="text-xs text-secondary ml-1">tap to mute</span>
+        {trackKeys.map(key => {
+          const off = muted[key];
+          return (
+            <button
+              key={key}
+              onClick={() => toggleMute(key)}
+              aria-pressed={!off}
+              title={`${trackLabels[key]} — ${off ? "muted, click to unmute" : "playing, click to mute"}`}
+              className={`flex items-center gap-1.5 border px-2.5 py-1.5 font-pixel text-[8px] transition-colors
+                ${off
+                  ? "border-theme text-secondary opacity-50"
+                  : "border-chip/50 bg-chip/10 text-chip"
+                }`}
+            >
+              <PixelSprite
+                sprite={SPRITES[CHANNEL_SPRITE[key as keyof typeof CHANNEL_SPRITE]]}
+                className="h-4 w-4 shrink-0"
+              />
+              {trackLabels[key]}
+            </button>
+          );
+        })}
+        <span className="text-[11px] text-secondary ml-1">tap to mute</span>
 
         <button
           onClick={handleDownload}
           disabled={exporting}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
-                     border border-chip/50 text-chip hover:bg-chip/10
+          className="ml-auto flex items-center gap-1.5 border border-chip/50 px-3 py-1.5 font-pixel text-[8px]
+                     text-chip hover:bg-chip/10
                      disabled:opacity-50 disabled:cursor-wait transition-colors"
         >
           {exporting ? (

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import PixelSprite from "./PixelSprite";
+import { SPRITES } from "../lib/sprites";
 import { useCreateFolder, useDeleteFolder, useFolders, useRenameFolder } from "../hooks/useFolders";
 import type { FolderItemType } from "../types";
 
@@ -23,8 +25,10 @@ export default function FolderBar({ kind, totalCount, selectedId, onSelect, acce
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
 
-  const activeChip = accent === "chip" ? "bg-chip text-white" : "bg-accent text-on-accent";
-  const idleChip = "bg-card text-secondary hover:bg-card-hover hover:text-primary border border-theme";
+  const activeChip =
+    accent === "chip" ? "border-chip bg-chip text-white" : "border-accent bg-accent text-on-accent";
+  const idleChip =
+    "border-theme bg-card text-secondary hover:bg-card-hover hover:text-primary";
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -56,7 +60,8 @@ export default function FolderBar({ kind, totalCount, selectedId, onSelect, acce
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Chip
-        label={`All songs${totalCount > 0 ? ` · ${totalCount}` : ""}`}
+        label={`All${totalCount > 0 ? ` · ${totalCount}` : ""}`}
+        icon={<PixelSprite sprite={SPRITES.cassette} className="h-3.5 w-3.5 shrink-0" />}
         active={selectedId === null}
         activeClass={activeChip}
         idleClass={idleChip}
@@ -69,7 +74,8 @@ export default function FolderBar({ kind, totalCount, selectedId, onSelect, acce
         return (
           <span key={folder.id} className="inline-flex items-center">
             <Chip
-              label={`📁 ${folder.name}${count > 0 ? ` · ${count}` : ""}`}
+              label={`${folder.name}${count > 0 ? ` · ${count}` : ""}`}
+              icon={<PixelSprite sprite={SPRITES.folder} className="h-3.5 w-3.5 shrink-0" />}
               active={active}
               activeClass={activeChip}
               idleClass={idleChip}
@@ -100,12 +106,12 @@ export default function FolderBar({ kind, totalCount, selectedId, onSelect, acce
               if (e.key === "Escape") { setCreating(false); setNewName(""); }
             }}
             placeholder="Folder name…"
-            className="w-32 rounded-full border border-theme bg-card px-3 py-1.5 text-sm text-primary placeholder:text-secondary focus:border-accent/60 focus:outline-none"
+            className="w-32 border border-theme bg-card px-3 py-1.5 text-sm text-primary placeholder:text-secondary focus:border-accent/60 focus:outline-none"
           />
           <button
             onClick={handleCreate}
             disabled={!newName.trim() || createFolder.isPending}
-            className={`rounded-full px-3 py-1.5 text-sm font-bold disabled:opacity-40 ${activeChip}`}
+            className={`border px-3 py-1.5 font-pixel text-[8px] disabled:opacity-40 ${activeChip}`}
           >
             Create
           </button>
@@ -124,19 +130,23 @@ export default function FolderBar({ kind, totalCount, selectedId, onSelect, acce
 }
 
 function Chip({
-  label, active, onClick, activeClass, idleClass,
+  label, active, onClick, activeClass, idleClass, icon,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
   activeClass: string;
   idleClass: string;
+  icon?: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${active ? activeClass : idleClass}`}
+      className={`flex items-center gap-1.5 border px-2.5 py-1.5 font-pixel text-[8px] transition-colors ${
+        active ? activeClass : idleClass
+      }`}
     >
+      {icon}
       {label}
     </button>
   );
