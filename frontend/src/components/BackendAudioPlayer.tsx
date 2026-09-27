@@ -66,7 +66,7 @@ export default function BackendAudioPlayer({ jobId }: BackendAudioPlayerProps) {
       setIsPlaying(false);
     } else {
       audio.play().then(() => setIsPlaying(true)).catch(() => {
-        setAudioError("El navegador bloqueó el audio");
+        setAudioError("The browser blocked audio playback");
       });
     }
   }
@@ -196,7 +196,7 @@ export default function BackendAudioPlayer({ jobId }: BackendAudioPlayerProps) {
         </svg>
         <p className="text-xs">
           {loading
-            ? "Cargando audio backend (FluidSynth)…"
+            ? "Loading backend audio (FluidSynth)…"
             : "Audio sintetizado en el backend (FluidSynth + soundfont GM, todas las pistas)."}
         </p>
         {audioError && <span className="text-xs text-red-400 ml-2">{audioError}</span>}

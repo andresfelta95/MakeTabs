@@ -5,6 +5,9 @@ import FolderBar from "./FolderBar";
 import SaveToFolderButton from "./SaveToFolderButton";
 import TabCard from "./TabCard";
 import ChiptuneCard from "./ChiptuneCard";
+import PixelSprite from "./PixelSprite";
+import { PixelHeading } from "./pixel";
+import { SPRITES, type Sprite } from "../lib/sprites";
 import { useFolder } from "../hooks/useFolders";
 import type { FolderItemType, LibraryCardJob } from "../types";
 
@@ -14,7 +17,7 @@ interface LibraryViewProps {
   kind: FolderItemType;
   title: string;
   hint: string;
-  emptyEmoji: string;
+  emptySprite: Sprite;
   accent: "accent" | "chip";
   jobs: LibraryCardJob[] | undefined;
   isLoading: boolean;
@@ -25,7 +28,7 @@ interface LibraryViewProps {
  * (search / artist / sort), and the card grid.
  */
 export default function LibraryView({
-  kind, title, hint, emptyEmoji, accent, jobs, isLoading,
+  kind, title, hint, emptySprite, accent, jobs, isLoading,
 }: LibraryViewProps) {
   const [folderId, setFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -82,24 +85,28 @@ export default function LibraryView({
   const loading = folderId ? folderLoading : isLoading;
   const libraryEmpty = !isLoading && (!jobs || jobs.length === 0);
   const color = accent === "chip" ? "text-chip" : "text-accent";
-  const underline = accent === "chip" ? "bg-chip/60" : "bg-accent/60";
   const focusBorder = accent === "chip" ? "focus:border-chip/60" : "focus:border-accent/60";
 
   return (
     <Layout>
       <div className="mb-5">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-primary">
-          {title}
-        </h1>
-        <p className="mt-0.5 text-sm text-secondary">{hint}</p>
-        <div className={`mt-2 h-0.5 w-10 rounded-full ${underline}`} />
+        <PixelHeading
+          as="h1"
+          title={title}
+          hint={hint}
+          sprite={kind === "tab" ? SPRITES.pick : SPRITES.cart}
+          accent={accent}
+        />
       </div>
 
       {/* Empty library: point back to the generator */}
       {libraryEmpty ? (
         <div className="py-16 text-center">
-          <div className="mb-3 text-4xl">{emptyEmoji}</div>
-          <p className="mb-1 font-semibold text-primary">Nothing here yet</p>
+          <PixelSprite
+            sprite={emptySprite}
+            className={`mx-auto mb-4 h-12 w-12 pix-bob ${color}`}
+          />
+          <p className="mb-1.5 font-pixel text-[10px] text-primary">Nothing here yet</p>
           <p className="text-sm text-secondary">
             <Link to="/" className={`font-semibold ${color} hover:underline`}>
               Search a song
@@ -126,13 +133,13 @@ export default function LibraryView({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by title or band…"
               aria-label="Filter songs"
-              className={`w-52 rounded-full border border-theme bg-card px-4 py-1.5 text-sm text-primary placeholder:text-secondary focus:outline-none ${focusBorder}`}
+              className={`w-52 border border-theme bg-card px-3 py-1.5 text-sm text-primary placeholder:text-secondary focus:outline-none ${focusBorder}`}
             />
             <select
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
               aria-label="Filter by band"
-              className={`rounded-full border border-theme bg-card px-3 py-1.5 text-sm text-primary focus:outline-none ${focusBorder}`}
+              className={`border border-theme bg-card px-3 py-1.5 text-sm text-primary focus:outline-none ${focusBorder}`}
             >
               <option value="">All bands</option>
               {artists.map((name) => (
@@ -143,7 +150,7 @@ export default function LibraryView({
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
               aria-label="Sort songs"
-              className={`rounded-full border border-theme bg-card px-3 py-1.5 text-sm text-primary focus:outline-none ${focusBorder}`}
+              className={`border border-theme bg-card px-3 py-1.5 text-sm text-primary focus:outline-none ${focusBorder}`}
             >
               <option value="recent">Newest first</option>
               <option value="title">Title A–Z</option>
@@ -158,8 +165,8 @@ export default function LibraryView({
 
           {!loading && filtered.length === 0 && (
             <div className="py-14 text-center">
-              <p className="mb-1 font-semibold text-primary">
-                {folderId && entries.length === 0 ? "This folder is empty" : "No songs match"}
+              <p className="mb-1.5 font-pixel text-[10px] text-primary">
+                {folderId && entries.length === 0 ? "Folder is empty" : "No songs match"}
               </p>
               <p className="text-sm text-secondary">
                 {folderId && entries.length === 0
@@ -193,7 +200,7 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="aspect-[3/4] animate-pulse rounded-xl bg-card" />
+        <div key={i} className="aspect-[3/4] animate-pulse border border-theme bg-card" />
       ))}
     </div>
   );

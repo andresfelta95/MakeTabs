@@ -2,9 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Backstage amp-rig ────────────────────────────────────────────────────
-   Warm tube-amber glow on stage-black. Light mode is warm paper in daylight.
-   Same token names as before so every component re-themes automatically. */
+/* ── Backstage amp-rig, 16-bit ────────────────────────────────────────────
+   Warm tube-amber glow on stage-black; light mode is warm paper in daylight.
+   The 2026-09 pass kept every token name and both themes and added a pixel
+   layer on top: character-grid sprites, a sequencer-roll backdrop, bitmap
+   display type and chunky square chrome.
+
+   Amber still means "tabs" and violet still means "16-bit" — that coding is
+   semantic, not decoration, so the pixel pass inherited it rather than
+   replacing it. */
 
 @layer base {
   :root {
@@ -20,6 +26,24 @@
     --accent-soft: rgba(180, 83, 9, 0.12);
     --chip:        #7c5cd6; /* 16-bit violet */
     --glow:        rgba(217, 119, 6, 0.07);
+
+    /* Pixel-art palette. Sprites use "@" (currentColor) for their main hue and
+       these for the fixed parts, so one grid works in both themes. */
+    --pix-shade:  rgba(28, 23, 18, 0.55); /* outline / shadow side */
+    --pix-light:  rgba(28, 23, 18, 0.14); /* highlight / panel face */
+    --pix-gold:   #a16207;                /* connectors, pins */
+    --pix-mesh-a: rgba(28, 23, 18, 0.30); /* speaker grille slats */
+    --pix-mesh-b: rgba(28, 23, 18, 0.16);
+    --pix-body:   rgba(28, 23, 18, 0.78); /* cabinet / shell interior */
+    --pix-hi:     #ffffff;                /* tape reels, highlights */
+
+    /* Sequencer-roll backdrop */
+    --pix-grid:   rgba(28, 23, 18, 0.16);
+    --pix-playhead: rgba(180, 83, 9, 0.55);
+    --pix-voice-melody:  rgba(180, 83, 9, 0.55);
+    --pix-voice-harmony: rgba(124, 92, 214, 0.45);
+    --pix-voice-lead:    rgba(13, 148, 136, 0.45);
+    --pix-voice-bass:    rgba(28, 23, 18, 0.28);
   }
 
   .dark {
@@ -35,6 +59,21 @@
     --accent-soft: rgba(251, 191, 36, 0.12);
     --chip:        #a78bfa;
     --glow:        rgba(251, 191, 36, 0.06);
+
+    --pix-shade:  rgba(0, 0, 0, 0.55);
+    --pix-light:  rgba(244, 238, 227, 0.22);
+    --pix-gold:   #f5b942;
+    --pix-mesh-a: rgba(244, 238, 227, 0.22);
+    --pix-mesh-b: rgba(244, 238, 227, 0.10);
+    --pix-body:   rgba(0, 0, 0, 0.62);
+    --pix-hi:     #f4eee3;
+
+    --pix-grid:   rgba(244, 238, 227, 0.10);
+    --pix-playhead: rgba(251, 191, 36, 0.7);
+    --pix-voice-melody:  rgba(251, 191, 36, 0.55);
+    --pix-voice-harmony: rgba(167, 139, 250, 0.5);
+    --pix-voice-lead:    rgba(45, 212, 191, 0.45);
+    --pix-voice-bass:    rgba(244, 238, 227, 0.22);
   }
 
   body {
@@ -72,6 +111,7 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+    .playhead { display: none; }
   }
 }
 
@@ -85,4 +125,85 @@
   .border-theme   { border-color: var(--border); }
   .bg-accent-soft { background-color: var(--accent-soft); }
   .text-on-accent { color: var(--on-accent); }
+
+  /* ── Pixel layer ──────────────────────────────────────────────────── */
+
+  /* Nothing in the art may interpolate: a sprite scaled 8× shows 8× squares. */
+  .pixelated {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+  }
+
+  /* Bitmap display face needs air between glyphs or it reads as a wall.
+     Short strings only — it is unreadable as running text. */
+  .font-pixel {
+    font-family: "Press Start 2P", "JetBrains Mono", monospace;
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+    text-transform: uppercase;
+  }
+
+  /* Amber bloom, dark mode only — on warm paper a glow just looks like a
+     printing error, so light mode leans on weight and border instead. */
+  .pix-glow { filter: none; }
+  .dark .pix-glow {
+    filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.4));
+  }
+  .pix-glow-chip { filter: none; }
+  .dark .pix-glow-chip {
+    filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.45));
+  }
+
+  /* Scanlines over cartridge art. Dark mode only, same reason. */
+  .pix-scan { position: relative; }
+  .dark .pix-scan::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.28) 0 1px,
+      transparent 1px 3px
+    );
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+/* The playhead crossing the sequencer roll. */
+@keyframes roll-play {
+  from { transform: translateX(0); }
+  to   { transform: translateX(var(--roll-w, 1344px)); }
+}
+.playhead {
+  animation: roll-play 24s linear infinite;
+}
+
+/* A channel LED that is actually doing something. */
+@keyframes pix-led {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.2; }
+}
+.pix-led { animation: pix-led 1.6s steps(2, end) infinite; }
+
+/* Sprites bob by whole pixels so the art never lands off-grid. */
+@keyframes pix-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.pix-bob {
+  animation: pix-bob 3.2s steps(4, end) infinite;
+  animation-delay: var(--bob-delay, 0s);
+}
+
+/* Entrances in CSS rather than JS, with fill-mode both, so content is
+   readable even before (or without) hydration. */
+@keyframes pix-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.pix-rise {
+  animation: pix-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--rise-delay, 0s);
 }

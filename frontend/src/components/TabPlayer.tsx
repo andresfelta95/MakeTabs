@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { TabData, AccompanimentTrack } from "../types";
+import PixelSprite from "./PixelSprite";
+import { PixelMeter } from "./pixel";
+import { SPRITES } from "../lib/sprites";
 
 const OPEN_MIDI: Record<number, number> = { 1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64 };
 const BEATS_PER_MEASURE = 16;
@@ -311,7 +314,7 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const AC = (window as any).AudioContext ?? (window as any).webkitAudioContext;
     if (!AC) {
-      setAudioError("Web Audio no soportado");
+      setAudioError("Web Audio not supported");
       return;
     }
     let ac: AudioContext;
@@ -333,7 +336,7 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
       setStatus("playing");
       startProgressLoop(ac);
     }).catch(() => {
-      setAudioError("El navegador bloqueó el audio");
+      setAudioError("The browser blocked audio playback");
       acRef.current = null;
     });
   }
@@ -365,7 +368,7 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
       const OAC: typeof OfflineAudioContext = (window as any).OfflineAudioContext
         ?? (window as any).webkitOfflineAudioContext;
       if (!OAC) {
-        setAudioError("Offline rendering no soportado");
+        setAudioError("Offline rendering not supported");
         return;
       }
       const sampleRate = 44100;
@@ -385,7 +388,7 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Offline render failed", e);
-      setAudioError("Error renderizando audio");
+      setAudioError("Audio render failed");
     } finally {
       setRendering(false);
     }
@@ -396,13 +399,16 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
   const guitarCount = tab.guitars?.length ?? (tab.sections ? 1 : 0);
 
   return (
-    <div className="bg-card border border-theme rounded-xl p-4 space-y-2">
+    <div className="relative border border-theme bg-card p-4 space-y-3">
+      <span aria-hidden className="absolute left-0 top-0 h-2.5 w-2.5 border-l border-t border-accent opacity-70" />
+      <span aria-hidden className="absolute bottom-0 right-0 h-2.5 w-2.5 border-b border-r border-accent opacity-70" />
+
       <div className="flex items-center gap-3">
         <button
           onClick={status === "playing" ? handlePause : handlePlay}
           title={status === "playing" ? "Pause" : "Play"}
-          className="w-10 h-10 rounded-full bg-accent text-black flex items-center justify-center
-                     hover:scale-105 active:scale-95 transition-transform flex-shrink-0"
+          className="w-10 h-10 bg-accent text-on-accent flex items-center justify-center
+                     hover:brightness-110 active:scale-95 transition-all flex-shrink-0"
         >
           {status === "playing" ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -420,23 +426,18 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
           <button
             onClick={handleStop}
             title="Stop"
-            className="w-8 h-8 rounded-full border border-theme text-secondary
+            className="w-8 h-8 border border-theme text-secondary
                        hover:text-primary flex items-center justify-center flex-shrink-0 transition-colors"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <rect x="3" y="3" width="18" height="18" />
             </svg>
           </button>
         )}
 
         <span className="text-xs text-secondary font-mono w-10 text-right">{fmt(elapsed)}</span>
 
-        <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
-          <div
-            className="h-full bg-accent rounded-full"
-            style={{ width: `${progress * 100}%`, transition: "none" }}
-          />
-        </div>
+        <PixelMeter value={progress} accent="accent" segments={40} className="flex-1 text-accent" />
 
         <span className="text-xs text-secondary font-mono w-10">{fmt(total)}</span>
 
@@ -444,8 +445,8 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
           onClick={handleDownload}
           disabled={rendering || notes.length === 0}
           title="Download synthesized audio (oscillator mix) as WAV"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
-                     border border-green-400/40 text-green-400 hover:bg-green-400/10
+          className="flex items-center gap-1.5 border border-theme px-3 py-1.5 font-pixel text-[8px]
+                     text-secondary hover:border-accent/50 hover:text-accent
                      disabled:opacity-50 disabled:cursor-wait transition-colors flex-shrink-0"
         >
           {rendering ? (
@@ -463,18 +464,14 @@ export default function TabPlayer({ tab, songTitle }: TabPlayerProps) {
         </button>
       </div>
 
-      <div className="flex items-center gap-1 text-secondary">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
+      <div className="flex items-center gap-2 text-secondary">
+        <PixelSprite sprite={SPRITES.amp} className="h-4 w-4 flex-shrink-0" />
         <p className="text-xs">
-          Mezcla en vivo: {guitarCount} guitarra{guitarCount === 1 ? "" : "s"}
+          Live mix: {guitarCount} guitar{guitarCount === 1 ? "" : "s"}
           {accCount > 0 && ` + ${(tab.accompaniment ?? []).map((a: AccompanimentTrack) => a.kind).join(" + ")}`}
-          . En mobile activá el sonido.
+          . On mobile, make sure silent mode is off.
         </p>
-        {audioError && <span className="text-xs text-red-400 ml-2">{audioError}</span>}
+        {audioError && <span className="ml-2 text-xs text-red-400">{audioError}</span>}
       </div>
     </div>
   );

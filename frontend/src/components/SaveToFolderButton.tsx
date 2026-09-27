@@ -7,6 +7,8 @@ import {
   useRemoveFromFolder,
 } from "../hooks/useFolders";
 import type { FolderItemType } from "../types";
+import PixelSprite from "./PixelSprite";
+import { SPRITES } from "../lib/sprites";
 
 interface SaveToFolderButtonProps {
   spotifyId: string;
@@ -56,11 +58,11 @@ export default function SaveToFolderButton({ spotifyId, itemType }: SaveToFolder
         onClick={() => setOpen((v) => !v)}
         aria-label={isSaved ? "Saved to folder — edit" : "Save to folder"}
         title={isSaved ? "Saved — edit folders" : "Save to folder"}
-        className={`flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-colors ${
+        className={`flex h-7 w-7 items-center justify-center backdrop-blur-sm transition-colors ${
           isSaved ? "bg-accent text-on-accent" : "bg-black/50 text-white hover:bg-black/70"
         }`}
       >
-        <BookmarkIcon filled={isSaved} />
+        <PixelSprite sprite={SPRITES.folder} className="h-4 w-4" />
       </button>
 
       {open && (
@@ -68,10 +70,12 @@ export default function SaveToFolderButton({ spotifyId, itemType }: SaveToFolder
           {/* click-away backdrop */}
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
 
-          <div className="absolute left-0 top-9 z-30 w-52 rounded-xl border border-theme bg-elevated p-2 shadow-xl">
-            <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-secondary">
-              Save to folder
-            </p>
+          <div className="absolute left-0 top-9 z-30 w-52 border border-theme bg-elevated p-2 shadow-xl">
+            <span
+              aria-hidden
+              className="absolute left-0 top-0 h-2 w-2 border-l border-t border-accent opacity-70"
+            />
+            <p className="px-2 pb-2 pt-0.5 font-pixel text-[8px] text-secondary">Save to folder</p>
 
             {(!folders || folders.length === 0) && (
               <p className="px-2 pb-2 text-xs text-secondary">No folders yet — create one below.</p>
@@ -84,11 +88,14 @@ export default function SaveToFolderButton({ spotifyId, itemType }: SaveToFolder
                   <button
                     key={folder.id}
                     onClick={() => toggleFolder(folder.id)}
-                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-card-hover ${
+                    className={`flex w-full items-center justify-between px-2 py-1.5 text-left text-sm transition-colors hover:bg-card-hover ${
                       active ? "font-semibold text-accent" : "text-primary"
                     }`}
                   >
-                    <span className="truncate">📁 {folder.name}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <PixelSprite sprite={SPRITES.folder} className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{folder.name}</span>
+                    </span>
                     {active && <CheckIcon />}
                   </button>
                 );
@@ -101,12 +108,12 @@ export default function SaveToFolderButton({ spotifyId, itemType }: SaveToFolder
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="New folder…"
-                className="min-w-0 flex-1 rounded-lg border border-theme bg-card px-2 py-1 text-xs text-primary placeholder:text-secondary focus:border-accent/60 focus:outline-none"
+                className="min-w-0 flex-1 border border-theme bg-card px-2 py-1 text-xs text-primary placeholder:text-secondary focus:border-accent/60 focus:outline-none"
               />
               <button
                 onClick={handleCreate}
                 disabled={!newName.trim() || createFolder.isPending}
-                className="rounded-lg bg-accent px-2 py-1 text-xs font-bold text-on-accent disabled:opacity-40"
+                className="bg-accent px-2 py-1 font-pixel text-[8px] text-on-accent disabled:opacity-40"
               >
                 Add
               </button>
@@ -115,14 +122,6 @@ export default function SaveToFolderButton({ spotifyId, itemType }: SaveToFolder
         </>
       )}
     </div>
-  );
-}
-
-function BookmarkIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5">
-      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 

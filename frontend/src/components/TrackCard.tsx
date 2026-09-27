@@ -1,4 +1,7 @@
 import type { CachedTabInfo, Track } from "../types";
+import PixelSprite from "./PixelSprite";
+import { SPRITES } from "../lib/sprites";
+import { Led } from "./pixel";
 
 interface TrackCardProps {
   track: Track;
@@ -17,31 +20,45 @@ function formatDuration(ms: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function TrackCard({ track, onGenerateTabs, onGenerateChiptune, isLoading, chiptuneLoading, tabInfo }: TrackCardProps) {
+export default function TrackCard({
+  track,
+  onGenerateTabs,
+  onGenerateChiptune,
+  isLoading,
+  chiptuneLoading,
+  tabInfo,
+}: TrackCardProps) {
   const hasCachedTab = tabInfo?.status === "done";
 
   return (
-    <div className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5
-                    transition-colors hover:border-theme hover:bg-card">
+    <div
+      className="group flex items-center gap-3 border border-transparent px-3 py-2.5
+                 transition-colors hover:border-theme hover:bg-card"
+    >
       {track.image_url ? (
         <img
           src={track.image_url}
           alt={track.album ?? track.title}
-          className="h-11 w-11 flex-shrink-0 rounded-lg object-cover"
+          className="h-11 w-11 flex-shrink-0 object-cover"
         />
       ) : (
-        <div className="h-11 w-11 flex-shrink-0 rounded-lg bg-card-hover" />
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center bg-card-hover">
+          <PixelSprite sprite={SPRITES.notes} className="h-5 w-5 text-secondary" />
+        </div>
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-primary">
-          {track.title}
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-primary">
+          <span className="truncate">{track.title}</span>
           {hasCachedTab && (
-            <span className="ml-1.5 align-middle text-xs text-accent" title="Tab already generated">●</span>
+            <span title="Tab already generated" className="shrink-0">
+              <Led />
+            </span>
           )}
         </p>
         <p className="truncate text-xs text-secondary">
-          {track.artist}{track.album && ` — ${track.album}`}
+          {track.artist}
+          {track.album && ` — ${track.album}`}
         </p>
       </div>
 
@@ -55,14 +72,22 @@ export default function TrackCard({ track, onGenerateTabs, onGenerateChiptune, i
           onClick={() => onGenerateTabs(track.spotify_id)}
           disabled={isLoading}
           title={hasCachedTab ? "Open the generated tab" : "Transcribe the guitar into tabs"}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all
+          className={`flex items-center gap-1.5 border px-3 py-1.5 font-pixel text-[8px] transition-all
                      disabled:cursor-not-allowed disabled:opacity-50
-                     ${hasCachedTab
-                       ? "bg-accent text-on-accent hover:scale-105 active:scale-95"
-                       : "border border-accent/60 text-accent hover:bg-accent hover:text-on-accent"
+                     ${
+                       hasCachedTab
+                         ? "border-accent bg-accent text-on-accent"
+                         : "border-accent/60 text-accent hover:bg-accent hover:text-on-accent"
                      }`}
         >
-          {isLoading ? "…" : hasCachedTab ? "▶ View tab" : "🎸 Tabs"}
+          {isLoading ? (
+            "…"
+          ) : (
+            <>
+              <PixelSprite sprite={SPRITES.pick} className="h-3.5 w-3.5" />
+              {hasCachedTab ? "View" : "Tabs"}
+            </>
+          )}
         </button>
 
         {onGenerateChiptune && (
@@ -70,11 +95,18 @@ export default function TrackCard({ track, onGenerateTabs, onGenerateChiptune, i
             onClick={() => onGenerateChiptune(track.spotify_id)}
             disabled={chiptuneLoading}
             title="Remake this song as a 16-bit chiptune"
-            className="rounded-full border border-chip/60 px-3.5 py-1.5 text-xs font-semibold text-chip
+            className="flex items-center gap-1.5 border border-chip/60 px-3 py-1.5 font-pixel text-[8px] text-chip
                        transition-all hover:bg-chip hover:text-white
                        disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {chiptuneLoading ? "…" : "🕹️ 16-bit"}
+            {chiptuneLoading ? (
+              "…"
+            ) : (
+              <>
+                <PixelSprite sprite={SPRITES.cart} className="h-3.5 w-3.5" />
+                16-bit
+              </>
+            )}
           </button>
         )}
       </div>
