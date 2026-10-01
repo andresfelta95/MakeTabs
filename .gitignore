@@ -33,8 +33,11 @@ backend/certs/
 .vscode/
 .idea/
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code: local workflows and settings (server checkout only)
+.claude/
+
+# Engineering change log written by the /workflows tournament agents
+.docs/
 
 # Accuracy-harness cache (Songsterr JSON + downloaded audio, ~300MB)
 backend/.diag_cache/
